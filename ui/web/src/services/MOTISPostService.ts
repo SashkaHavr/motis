@@ -9,6 +9,8 @@ import { TrainGuessResponseContent } from '../models/TrainGuess'
 import ConnectionResponseContent, { ConnectionRequestContent } from "../models/ConnectionContent"
 import InitialScheduleInfoResponseContent from "../models/InitRequestResponseContent"
 
+const apiEndPoint = "http://localhost:8081/";
+
 /* eslint-disable camelcase*/
 const service: MOTISPostService = {
   async getStationGuessResponse(input: string, gc: number) {
@@ -23,7 +25,7 @@ const service: MOTISPostService = {
         guess_count: gc
       }
     };
-    return (await axios.post<StationGuessResponse>("https://europe.motis-project.de/", rq)).data.content;
+    return (await axios.post<StationGuessResponse>(apiEndPoint, rq)).data.content;
   },
   async getAddressGuessResponse(input: string) {
     const rq = {
@@ -36,7 +38,7 @@ const service: MOTISPostService = {
         input: input
       }
     };
-    return (await axios.post<AddressGuessResponse>("https://europe.motis-project.de/", rq)).data.content;
+    return (await axios.post<AddressGuessResponse>(apiEndPoint, rq)).data.content;
   },
   async getTripResponce(trip: Trip) {
     const rq = {
@@ -47,7 +49,7 @@ const service: MOTISPostService = {
       content_type: "TripId",
       content: trip
     };
-    return (await axios.post<TripResponce>("https://europe.motis-project.de/", rq)).data.content;
+    return (await axios.post<TripResponce>(apiEndPoint, rq)).data.content;
   },
   async getDeparturesResponse(station: string, byScheduleTime: boolean, direction: ("BOTH" | "EARLIER" | "LATER"), eventCount: number, time: number) {
     const rq = {
@@ -64,7 +66,7 @@ const service: MOTISPostService = {
         time: time
       },
     };
-  return (await axios.post<RailVizStationResponse>("https://europe.motis-project.de/", rq)).data.content;
+  return (await axios.post<RailVizStationResponse>(apiEndPoint, rq)).data.content;
   },
   async getTrainGuessResponse(currentTime: number, currentTrainNum: number){
     const rq = {
@@ -79,9 +81,9 @@ const service: MOTISPostService = {
             train_num: currentTrainNum
         },
     }
-    return (await axios.post<TrainGuessResponse>("https://europe.motis-project.de/", rq)).data.content;
+    return (await axios.post<TrainGuessResponse>(apiEndPoint, rq)).data.content;
   },
-  async getConnectionResponse(connectionRequest: ConnectionRequestContent){
+  async getConnectionResponse(connectionRequest: ConnectionRequestContent, smthing: boolean){
     const rq = {
         destination: {
           target: "/intermodal",
@@ -94,7 +96,30 @@ const service: MOTISPostService = {
           search_dir: "Forward"
         },
     }
-    return (await axios.post<ConnectionResponse>("https://europe.motis-project.de/", rq)).data.content;
+    return (await axios.post<ConnectionResponse>(apiEndPoint, rq)).data.content;
+  },
+  async getConnectionResponseRaptorMcraptor(connectionRequest: ConnectionRequestContent, mcRaptor: boolean){
+    const rq = {
+      "destination": {
+          "type": "Module",
+          "target": mcRaptor ? "/mcraptor" : "/raptor"
+      },
+      "content_type": "RoutingRequest",
+      "content": {
+          "start_type": connectionRequest.start_type,
+          "start": connectionRequest.start,
+          "destination": connectionRequest.destination,
+          "search_type": "Accessibility",
+          "search_dir": "Forward",
+          "via": [],
+          "additional_edges": [],
+          "use_start_metas": false,
+          "use_dest_metas": false,
+          "use_start_footpaths": false,
+          "schedule": 0
+      }
+    }
+    return (await axios.post<ConnectionResponse>(apiEndPoint, rq)).data.content;
   },
   async getInitialRequestScheduleInfo(){
     const rq = {
@@ -105,7 +130,7 @@ const service: MOTISPostService = {
         type: "Module"
       }
     }
-    return (await axios.post<InitialScheduleInfoResponse>("https://europe.motis-project.de/", rq)).data.content;
+    return (await axios.post<InitialScheduleInfoResponse>(apiEndPoint, rq)).data.content;
   }
 }
 
@@ -185,8 +210,9 @@ interface MOTISPostService {
   getTripResponce(input: Trip) : Promise<TripResponseContent>
   getDeparturesResponse(station: string, byScheduleTime: boolean, direction: string, eventCount: number, time: number) : Promise<RailVizStationResponseContent>
   getTrainGuessResponse(currentTime: number, currentTrainNum: number): Promise<TrainGuessResponseContent>
-  getConnectionResponse(connectionRequest: ConnectionRequestContent): Promise<ConnectionResponseContent>
-  getInitialRequestScheduleInfo(): Promise<InitialScheduleInfoResponseContent>
+  getConnectionResponse(connectionRequest: ConnectionRequestContent, smthing: boolean): Promise<ConnectionResponseContent>
+  getInitialRequestScheduleInfo(): Promise<InitialScheduleInfoResponseContent>,
+  getConnectionResponseRaptorMcraptor(connectionRequest: ConnectionRequestContent, mcRaptor: boolean) : Promise<ConnectionResponseContent>
 }
 
 

@@ -69,6 +69,13 @@
         <input type="radio" id="search-backward" name="time-option" />
         <label for="search-backward" @click="isDeparture = false, sendRequest()">{{ $t.arrival }}</label>
       </div>
+      <div>
+        <select v-model="searchEngine">
+          <option value="standard">Standard</option>
+          <option value="raptor">Raptor</option>
+          <option value="mcRaptor">mcRaptor</option>
+        </select>
+      </div>
     </div>
 
     <div class="mode-picker-editor" v-show="isOptionsWindowOpened">
@@ -331,7 +338,7 @@ export default defineComponent({
       linesDivWidth: 0,
       textMeasureCanvas: null as CanvasRenderingContext2D | null,
       TimeGap: TimeGap,
-      mapHoverOptions: null as (null | MapHoverOptions)
+      mapHoverOptions: null as (null | MapHoverOptions),
     };
   },
   watch: {
@@ -532,14 +539,14 @@ export default defineComponent({
         }
         this.timeoutIndex = setTimeout(() => {
           this.timeoutIndex = -1;
-          this.$postService.getConnectionResponse({
+          (this.searchEngine === "standard" ? this.$postService.getConnectionResponse : this.$postService.getConnectionResponseRaptorMcraptor)({
             start_type: "id" in this.startObject ? "PretripStart" : "IntermodalPretripStart",
             start: start,
             start_modes: this.getModesArray(this.firstOptions),
             destination_type: "id" in this.destinationObject ? "InputStation" : "InputPosition",
             destination: destination,
             destination_modes: this.getModesArray(this.secondOptions)
-          }).then((data) => {
+          }, this.searchEngine === "mcRaptor").then((data) => {
             this.$store.state.areConnectionsDropped = false;
             this.setConnections(data.connections, changeGap, start.extend_interval_earlier)
           }).catch(() => {
