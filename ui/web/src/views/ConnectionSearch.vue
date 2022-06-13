@@ -71,9 +71,15 @@
       </div>
       <div>
         <select v-model="searchEngine">
-          <option value="standard">Standard</option>
-          <option value="raptor">Raptor</option>
-          <option value="mcRaptor">mcRaptor</option>
+          <option value="standard">
+            Standard
+          </option>
+          <option value="raptor">
+            Raptor
+          </option>
+          <option value="mcRaptor">
+            mcRaptor
+          </option>
         </select>
       </div>
     </div>
@@ -339,6 +345,7 @@ export default defineComponent({
       textMeasureCanvas: null as CanvasRenderingContext2D | null,
       TimeGap: TimeGap,
       mapHoverOptions: null as (null | MapHoverOptions),
+      searchEngine: "standard"
     };
   },
   watch: {
@@ -357,6 +364,9 @@ export default defineComponent({
         this.linesDivWidth = this.linesDiv.clientWidth;
         new ResizeObserver(() => this.linesDivWidth = !this.linesDiv ? 0 : this.linesDiv.clientWidth).observe(this.linesDiv);
       }
+    },
+    searchEngine() {
+      this.sendRequest();
     }
   },
   activated() {

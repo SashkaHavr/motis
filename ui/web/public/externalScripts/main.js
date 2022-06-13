@@ -3,7 +3,7 @@
 (function bootstrap() {
   let params = getQueryParameters();
   // let apiEndpoint = getApiEndpoint(params);
-  let apiEndpoint = "https://europe.motis-project.de/";
+  let apiEndpoint = "http://localhost:8080/";
 
   const mapConfigUrl = apiEndpoint + "railviz/map_config";
   let mapConfigPromise = fetch(mapConfigUrl)

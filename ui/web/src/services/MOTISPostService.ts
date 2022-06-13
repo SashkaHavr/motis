@@ -9,7 +9,7 @@ import { TrainGuessResponseContent } from '../models/TrainGuess'
 import ConnectionResponseContent, { ConnectionRequestContent } from "../models/ConnectionContent"
 import InitialScheduleInfoResponseContent from "../models/InitRequestResponseContent"
 
-const apiEndPoint = "http://localhost:8081/";
+const apiEndPoint = "http://localhost:8080/";
 
 /* eslint-disable camelcase*/
 const service: MOTISPostService = {
