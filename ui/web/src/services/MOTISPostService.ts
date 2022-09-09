@@ -8,6 +8,7 @@ import { RailVizStationResponseContent } from '../models/DepartureTimetable';
 import { TrainGuessResponseContent } from '../models/TrainGuess'
 import ConnectionResponseContent, { ConnectionRequestContent } from "../models/ConnectionContent"
 import InitialScheduleInfoResponseContent from "../models/InitRequestResponseContent"
+import ConnectionSearch from "../views/ConnectionSearch.vue"
 
 const apiEndPoint = "http://localhost:8080/";
 
@@ -110,7 +111,7 @@ const service: MOTISPostService = {
           "start": connectionRequest.start,
           "destination": connectionRequest.destination,
           "search_type": "Accessibility",
-          "search_dir": "Forward",
+          "search_dir": connectionRequest.search_dir,
           "via": [],
           "additional_edges": [],
           "use_start_metas": false,

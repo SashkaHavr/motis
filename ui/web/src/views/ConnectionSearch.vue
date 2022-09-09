@@ -555,7 +555,8 @@ export default defineComponent({
             start_modes: this.getModesArray(this.firstOptions),
             destination_type: "id" in this.destinationObject ? "InputStation" : "InputPosition",
             destination: destination,
-            destination_modes: this.getModesArray(this.secondOptions)
+            destination_modes: this.getModesArray(this.secondOptions),
+            search_dir: this.isDeparture? "Forward" : "Backward",
           }, this.searchEngine === "mcRaptor").then((data) => {
             this.$store.state.areConnectionsDropped = false;
             this.setConnections(data.connections, changeGap, start.extend_interval_earlier)

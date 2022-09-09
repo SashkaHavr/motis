@@ -14,7 +14,8 @@ export interface ConnectionRequestContent {
   start_modes: Mode[],
   destination_type: "InputStation" | "InputPosition",
   destination: Position | InputStation
-  destination_modes: Mode[]
+  destination_modes: Mode[],
+  search_dir: string,
 }
 
 export interface InputStation {
