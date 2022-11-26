@@ -12,6 +12,7 @@
 
 #include "motis/paxmon/loader/loader_result.h"
 #include "motis/paxmon/paxmon_data.h"
+#include "motis/paxmon/settings/journey_input_settings.h"
 #include "motis/paxmon/statistics.h"
 #include "motis/paxmon/stats_writer.h"
 #include "motis/paxmon/universe.h"
@@ -41,15 +42,16 @@ private:
   motis::module::msg_ptr rt_update(motis::module::msg_ptr const& msg);
   void rt_updates_applied(motis::module::msg_ptr const& msg);
   void rt_updates_applied(universe& uv, schedule const& sched);
+  void universe_gc() const;
 
   universe& primary_universe();
 
   std::vector<std::string> journey_files_;
+  settings::journey_input_settings journey_input_settings_{};
   std::vector<std::string> capacity_files_;
   std::string generated_capacity_file_;
   std::string stats_file_;
   std::string capacity_match_log_file_{};
-  std::string journey_match_log_file_{};
   std::string initial_over_capacity_report_file_{};
   std::string initial_broken_report_file_{};
   std::string initial_reroute_query_file_{};
@@ -57,7 +59,6 @@ private:
   conf::time start_time_{};
   conf::time end_time_{};
   int time_step_{60};
-  std::uint16_t match_tolerance_{0};
   bool reroute_unmatched_{false};
   int arrival_delay_threshold_{20};
   int preparation_time_{15};
@@ -66,8 +67,7 @@ private:
   std::string mcfp_scenario_dir_{};
   int mcfp_scenario_min_broken_groups_{500};
   bool mcfp_scenario_include_trip_info_{false};
-  bool keep_group_history_{false};
-  bool reuse_groups_{true};
+  bool graph_log_enabled_{false};
 
   paxmon_data data_;
   std::unique_ptr<stats_writer> stats_writer_;

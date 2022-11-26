@@ -9,7 +9,12 @@
 #include <utility>
 #include <vector>
 
+#include "boost/uuid/nil_generator.hpp"
+#include "boost/uuid/string_generator.hpp"
+#include "boost/uuid/uuid_io.hpp"
+
 #include "utl/enumerate.h"
+#include "utl/erase.h"
 #include "utl/to_vec.h"
 #include "utl/verify.h"
 #include "utl/zip.h"
@@ -19,10 +24,13 @@
 #include "motis/core/access/realtime_access.h"
 #include "motis/core/access/station_access.h"
 #include "motis/core/access/trip_iterator.h"
+#include "motis/core/access/uuids.h"
 #include "motis/core/conv/trip_conv.h"
+#include "motis/core/debug/trip.h"
 
 #include "motis/rt/build_route_node.h"
 #include "motis/rt/connection_builder.h"
+#include "motis/rt/expanded_trips.h"
 #include "motis/rt/incoming_edges.h"
 #include "motis/rt/update_constant_graph.h"
 
@@ -45,6 +53,10 @@ inline timestamp_reason from_fbs(TimestampType const t) {
   }
 }
 
+inline boost::uuids::uuid parse_uuid(std::string_view const sv) {
+  return boost::uuids::string_generator{}(sv.begin(), sv.end());
+}
+
 struct full_trip_handler {
   struct event_info {
     station_node* station_{};
@@ -55,6 +67,7 @@ struct full_trip_handler {
     std::uint16_t schedule_track_{};
     std::uint16_t current_track_{};
     ev_key ev_key_;
+    boost::uuids::uuid uuid_{};
 
     inline bool time_updated(event_info const& o) const {
       return current_time_ != o.current_time_ ||
@@ -106,6 +119,7 @@ struct full_trip_handler {
     get_or_add_station(msg_->trip_id()->start_station());
     get_or_add_station(msg_->trip_id()->target_station());
     auto const ftid = get_full_trip_id();
+    auto const trip_uuid = parse_uuid(view(msg_->trip_id()->uuid()));
     result_.trp_ = find_existing_trip(ftid);
     result_.is_new_trip_ = result_.trp_ == nullptr;
 
@@ -177,6 +191,8 @@ struct full_trip_handler {
         propagator_.recalculate(cur_sec.arr_.get_ev_key());
       }
     }
+
+    update_trip_uuid(trip_uuid);
 
     if (result_.delay_updates_ > 0) {
       ++stats_.delay_msgs_;
@@ -295,7 +311,8 @@ private:
            from_fbs(ts->departure()->current_time_type()),
            get_track(sched_, view(ts->departure()->schedule_track())),
            get_track(sched_, view(ts->departure()->current_track())),
-           {}},
+           {},
+           parse_uuid(view(ts->departure()->uuid()))},
           {to,
            ts->arrival()->interchange_allowed(),
            unix_to_motistime(sched_, ts->arrival()->schedule_time()),
@@ -303,7 +320,8 @@ private:
            from_fbs(ts->arrival()->current_time_type()),
            get_track(sched_, view(ts->arrival()->schedule_track())),
            get_track(sched_, view(ts->arrival()->current_track())),
-           {}},
+           {},
+           parse_uuid(view(ts->arrival()->uuid()))},
           nullptr};
     });
   }
@@ -323,12 +341,18 @@ private:
               {sec.from_node()->get_station(), sec.from_node()->is_in_allowed(),
                di_from.get_schedule_time(), lc.d_time_, di_from.get_reason(),
                get_schedule_track(sched_, ev_from), sec.fcon().d_track_,
-               ev_from},
+               ev_from, get_event_uuid(trp, ev_from)},
               {sec.to_node()->get_station(), sec.to_node()->is_out_allowed(),
                di_to.get_schedule_time(), lc.a_time_, di_to.get_reason(),
-               get_schedule_track(sched_, ev_to), sec.fcon().a_track_, ev_to},
+               get_schedule_track(sched_, ev_to), sec.fcon().a_track_, ev_to,
+               get_event_uuid(trp, ev_to)},
               const_cast<light_connection*>(&lc)};  // NOLINT
         });
+  }
+
+  boost::uuids::uuid get_event_uuid(trip const* trp, ev_key const& evk) const {
+    return motis::access::get_event_uuid(sched_, trp, evk)
+        .value_or(boost::uuids::nil_uuid());
   }
 
   static bool is_rule_service(trip const* trp) {
@@ -481,6 +505,9 @@ private:
 
   trip* create_or_update_trip(trip* trp, full_trip_id const& ftid,
                               mcd::vector<trip::route_edge> const& trip_edges) {
+    std::optional<expanded_trip_index> old_eti;
+    std::optional<expanded_trip_index> new_eti;
+
     auto const edges =
         sched_.trip_edges_
             .emplace_back(
@@ -492,9 +519,10 @@ private:
     if (trp == nullptr) {
       trp = sched_.trip_mem_
                 .emplace_back(mcd::make_unique<trip>(
-                    ftid, edges, lcon_idx,
+                    ftid, "", edges, lcon_idx,
                     static_cast<trip_idx_t>(sched_.trip_mem_.size()),
-                    trip_debug{}))
+                    trip_debug{}, mcd::vector<uint32_t>{},
+                    boost::uuids::nil_uuid()))
                 .get();
 
       auto const trp_entry =
@@ -503,6 +531,7 @@ private:
           std::lower_bound(begin(sched_.trips_), end(sched_.trips_), trp_entry),
           trp_entry);
     } else {
+      old_eti = remove_expanded_trip(trp);
       for (auto const& e : *trp->edges_) {
         e.get_edge()->m_.route_edge_.conns_[trp->lcon_idx_].valid_ = 0U;
       }
@@ -510,17 +539,57 @@ private:
       trp->lcon_idx_ = lcon_idx;
     }
 
-    // TODO(pablo): reuse existing
-    auto const new_trps_id = sched_.merged_trips_.size();
-    sched_.merged_trips_.emplace_back(
-        mcd::make_unique<mcd::vector<ptr<trip>>,
-                         std::initializer_list<ptr<trip>>>({trp}));
+    if (!trip_edges.empty()) {
+      // TODO(pablo): reuse existing
+      auto const new_trps_id = sched_.merged_trips_.size();
+      sched_.merged_trips_.emplace_back(
+          mcd::make_unique<mcd::vector<ptr<trip>>,
+                           std::initializer_list<ptr<trip>>>({trp}));
 
-    for (auto const& trp_edge : trip_edges) {
-      trp_edge.get_edge()->m_.route_edge_.conns_[lcon_idx].trips_ = new_trps_id;
+      for (auto const& trp_edge : trip_edges) {
+        trp_edge.get_edge()->m_.route_edge_.conns_[lcon_idx].trips_ =
+            new_trps_id;
+      }
+
+      new_eti = add_expanded_trip(trp);
     }
 
+    update_builder_.expanded_trip_moved(trp, old_eti, new_eti);
+
     return trp;
+  }
+
+  std::optional<expanded_trip_index> remove_expanded_trip(trip const* trp) {
+    if (trp->edges_->empty()) {
+      return {};
+    }
+    auto const old_route_id = trp->edges_->front()->from_->route_;
+    for (auto const old_exp_route_id :
+         sched_.route_to_expanded_routes_.at(old_route_id)) {
+      auto exp_route = sched_.expanded_trips_.at(old_exp_route_id);
+      if (auto it = std::find(begin(exp_route), end(exp_route), trp);
+          it != end(exp_route)) {
+        auto const eti = expanded_trip_index{
+            old_exp_route_id,
+            static_cast<uint32_t>(std::distance(begin(exp_route), it))};
+        exp_route.erase(it);
+        if (exp_route.empty()) {
+          utl::erase(sched_.route_to_expanded_routes_.at(old_route_id),
+                     old_exp_route_id);
+        }
+        return eti;
+      }
+    }
+    LOG(warn) << "rt::full_trip_handler: expanded trip not found: "
+              << debug::trip{sched_, trp};
+    return {};
+  }
+
+  expanded_trip_index add_expanded_trip(trip* trp) {
+    assert(!trp->edges_->empty());
+    auto const route_id = static_cast<uint32_t>(
+        trp->edges_->front().get_edge()->get_source()->route_);
+    return add_trip_to_new_expanded_route(sched_, trp, route_id);
   }
 
   void update_event(event_info const& cur_event, event_info const& msg_event,
@@ -548,6 +617,17 @@ private:
           evk, sched_.tracks_.at(msg_event.current_track_).str(),
           msg_event.schedule_time_);
       ++result_.track_updates_;
+    }
+    auto const uuid_changed = cur_event.uuid_ != msg_event.uuid_;
+    if (uuid_changed || is_reroute()) {
+      if (uuid_changed && !cur_event.uuid_.is_nil()) {
+        LOG(warn) << "event uuid changed: " << cur_event.uuid_ << " -> "
+                  << msg_event.uuid_;
+      }
+      auto const trip_and_ev_key =
+          mcd::pair{ptr<trip const>{result_.trp_}, evk};
+      sched_.uuid_to_event_[msg_event.uuid_] = trip_and_ev_key;
+      sched_.event_to_uuid_[trip_and_ev_key] = msg_event.uuid_;
     }
   }
 
@@ -618,6 +698,13 @@ private:
                di != end(cancelled_delays_)) {
       di->second->set_ev_key(new_ev_key);
       sched_.graph_to_delay_info_[new_ev_key] = di->second;
+    }
+  }
+
+  void update_trip_uuid(boost::uuids::uuid const& trip_uuid) {
+    if (result_.trp_->uuid_ != trip_uuid) {
+      result_.trp_->uuid_ = trip_uuid;
+      sched_.uuid_to_trip_[trip_uuid] = result_.trp_;
     }
   }
 

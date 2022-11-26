@@ -1,11 +1,11 @@
 [address-typeahead]
   url=git@github.com:motis-project/address-typeahead.git
   branch=master
-  commit=9b33a191c05ee3f489492ea9a89253eaa26b91d4
+  commit=d16126b3fea13f18263e58c0f680807d68d315cf
 [cista]
   url=git@github.com:felixguendling/cista.git
   branch=master
-  commit=9d5efe87ac5ee8215e26900cdcc5a13ce3381f0b
+  commit=15dc3ec7711682fe7e51d9a0feb9d0fab0ad6d4a
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
@@ -29,7 +29,7 @@
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
-  commit=8d1b88eb5529154e50c5e0edf6adeaf9ff2af158
+  commit=5bf5179faf5f21d543866cca85fe090fe3664cc5
 [googletest]
   url=git@github.com:motis-project/googletest.git
   branch=master
@@ -45,7 +45,8 @@
 [net]
   url=git@github.com:motis-project/net.git
   branch=master
-  commit=0e635db330364eb121899cd1e124ed20cc2210f6
+  commit=e9996f1df2375240e7402dc471e2a1746312ef58
+
 [osrm-backend]
   url=git@github.com:motis-project/osrm-backend.git
   branch=motis
@@ -53,7 +54,7 @@
 [ppr]
   url=git@github.com:motis-project/ppr.git
   branch=master
-  commit=0ccf7e5e950f43504dcb9f19506942209ac0f90d
+  commit=e92e23a42d9883dcc9806d7ae027fb8febd11175
 [protobuf]
   url=git@github.com:motis-project/protobuf.git
   branch=master
@@ -77,7 +78,7 @@
 [utl]
   url=git@github.com:motis-project/utl.git
   branch=master
-  commit=6d7c7fd4e6167a1232bb5f7affcda9003e657ecf
+  commit=dcfa07fed2ffe5e68248524bd29c58cca90a96d1
 [guess]
   url=git@github.com:motis-project/guess.git
   branch=master
@@ -85,7 +86,7 @@
 [boost]
   url=git@github.com:motis-project/boost.git
   branch=master
-  commit=c90d53bdcd7ff741a416ae122b33c9c2a96e8be7
+  commit=ad6cbb38470efd74265715e0972cb5ae44527fb1
 [mimalloc]
   url=git@github.com:motis-project/mimalloc.git
   branch=master

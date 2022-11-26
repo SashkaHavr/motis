@@ -29,6 +29,8 @@ import {
 import {
   PaxMonAddGroupsRequest,
   PaxMonAddGroupsResponse,
+  PaxMonDebugGraphRequest,
+  PaxMonDebugGraphResponse,
   PaxMonDestroyUniverseRequest,
   PaxMonFilterGroupsRequest,
   PaxMonFilterGroupsResponse,
@@ -48,7 +50,14 @@ import {
   PaxMonGetInterchangesResponse,
   PaxMonGetTripLoadInfosRequest,
   PaxMonGetTripLoadInfosResponse,
+  PaxMonGetUniversesResponse,
+  PaxMonGroupStatisticsRequest,
+  PaxMonGroupStatisticsResponse,
+  PaxMonKeepAliveRequest,
+  PaxMonKeepAliveResponse,
   PaxMonRemoveGroupsRequest,
+  PaxMonRerouteGroupsRequest,
+  PaxMonRerouteGroupsResponse,
   PaxMonStatusRequest,
   PaxMonStatusResponse,
   PaxMonTripLoadInfo,
@@ -197,6 +206,9 @@ export type ProblemType =
   | "NO_PROBLEM"
   | "INTERCHANGE_TIME_VIOLATED"
   | "CANCELED_TRAIN";
+
+// base/SearchDir.fbs
+export type SearchDir = "Forward" | "Backward";
 
 // base/ServiceInfo.fbs
 export interface ServiceInfo {
@@ -367,7 +379,16 @@ export type MsgContent =
   | LookupRiBasisResponse
   | PaxForecastApplyMeasuresResponse
   | PaxMonGetAddressableGroupsRequest
-  | PaxMonGetAddressableGroupsResponse;
+  | PaxMonGetAddressableGroupsResponse
+  | PaxMonKeepAliveRequest
+  | PaxMonKeepAliveResponse
+  | PaxMonRerouteGroupsRequest
+  | PaxMonRerouteGroupsResponse
+  | PaxMonGroupStatisticsRequest
+  | PaxMonGroupStatisticsResponse
+  | PaxMonDebugGraphRequest
+  | PaxMonDebugGraphResponse
+  | PaxMonGetUniversesResponse;
 
 export type MsgContentType =
   | "MotisNoMessage"
@@ -429,7 +450,16 @@ export type MsgContentType =
   | "LookupRiBasisResponse"
   | "PaxForecastApplyMeasuresResponse"
   | "PaxMonGetAddressableGroupsRequest"
-  | "PaxMonGetAddressableGroupsResponse";
+  | "PaxMonGetAddressableGroupsResponse"
+  | "PaxMonKeepAliveRequest"
+  | "PaxMonKeepAliveResponse"
+  | "PaxMonRerouteGroupsRequest"
+  | "PaxMonRerouteGroupsResponse"
+  | "PaxMonGroupStatisticsRequest"
+  | "PaxMonGroupStatisticsResponse"
+  | "PaxMonDebugGraphRequest"
+  | "PaxMonDebugGraphResponse"
+  | "PaxMonGetUniversesResponse";
 
 // Message.fbs
 export type DestinationType = "Module" | "Topic";

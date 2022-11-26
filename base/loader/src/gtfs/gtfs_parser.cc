@@ -9,6 +9,7 @@
 #include "utl/erase_if.h"
 #include "utl/get_or_create.h"
 #include "utl/pairwise.h"
+#include "utl/parallel_for.h"
 #include "utl/parser/cstr.h"
 #include "utl/pipes/accumulate.h"
 #include "utl/pipes/all.h"
@@ -111,74 +112,6 @@ std::time_t to_unix_time(boost::gregorian::date const& date) {
   return (boost::posix_time::ptime(date) - epoch).total_seconds();
 }
 
-void fix_stop_positions(trip_map& trips) {
-  auto const is_logical = [](stop_time const& a, stop_time const& b) {
-    constexpr auto const SLACK_BUFFER = 5;
-    auto const dist_in_m = geo::distance(a.stop_->coord_, b.stop_->coord_);
-    if (dist_in_m <= 1.0) {
-      return true;
-    }
-    auto const time_diff_in_min = b.arr_.time_ - a.dep_.time_ + SLACK_BUFFER;
-    auto const speed_in_kmh = (dist_in_m / 1000.0) / (time_diff_in_min / 60.0);
-    return speed_in_kmh < 350;
-  };
-
-  auto const is_strange = [](stop_time const& s) {
-    return std::abs(s.stop_->coord_.lat_) < 5 &&
-           std::abs(s.stop_->coord_.lng_) < 5;
-  };
-
-  for (auto const& [id, t] : trips) {
-    auto const stops = t->stop_times_.to_vector();
-    for (auto const [a, b, c] : utl::nwise<3>(stops)) {
-      auto const logical_a_b = is_logical(a, b);
-      auto const logical_b_c = is_logical(b, c);
-      auto const logical_a_c = is_logical(a, c);
-
-      stop* corrected = nullptr;
-      geo::latlng before;
-      auto const correct = [&](stop_time const& s,
-                               geo::latlng const& new_coord) {
-        corrected = s.stop_;
-        before = s.stop_->coord_;
-        s.stop_->coord_ = new_coord;
-      };
-
-      if (!logical_a_b && !logical_b_c && logical_a_c && !is_strange(a) &&
-          !is_strange(c)) {
-        correct(b, geo::latlng{
-                       a.stop_->coord_.lat_ +
-                           0.5 * (c.stop_->coord_.lat_ - a.stop_->coord_.lat_),
-                       a.stop_->coord_.lng_ + 0.5 * (c.stop_->coord_.lng_ -
-                                                     a.stop_->coord_.lng_)});
-      } else if (!logical_a_b && logical_b_c && !is_strange(b)) {
-        correct(a, b.stop_->coord_);
-      } else if (logical_a_b && !logical_b_c && !is_strange(b)) {
-        correct(c, b.stop_->coord_);
-      } else if (is_strange(a) && (!is_strange(b) || !is_strange(c))) {
-        correct(a, !is_strange(b) ? c.stop_->coord_ : b.stop_->coord_);
-      } else if (is_strange(b) && (!is_strange(a) || !is_strange(c))) {
-        correct(b, !is_strange(a) ? a.stop_->coord_ : c.stop_->coord_);
-      } else if (is_strange(c) && (!is_strange(a) || !is_strange(b))) {
-        correct(c, !is_strange(a) ? a.stop_->coord_ : b.stop_->coord_);
-      }
-
-      if (corrected != nullptr) {
-        LOG(warn) << "adjusting stop position from (" << before.lat_ << ", "
-                  << before.lng_ << ") to (" << corrected->coord_.lat_ << ", "
-                  << corrected->coord_.lng_
-                  << "): sanity check failed for trip \"" << id
-                  << "\", stop_id=" << corrected->id_ << " (a=" << a.stop_->id_
-                  << ", b=" << b.stop_->id_ << ", c=" << c.stop_->id_
-                  << "): " << a.stop_->coord_.lat_ << ","
-                  << a.stop_->coord_.lng_ << " -> " << b.stop_->coord_.lat_
-                  << "," << b.stop_->coord_.lng_ << " -> "
-                  << c.stop_->coord_.lat_ << "," << c.stop_->coord_.lng_;
-      }
-    }
-  }
-}
-
 void fix_flixtrain_transfers(trip_map& trips,
                              std::map<stop_pair, transfer>& transfers) {
   for (auto const& id_prefix : {"FLIXBUS:FLX", "FLIXBUS:K"}) {
@@ -255,7 +188,6 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
   auto transfers = read_transfers(load(TRANSFERS_FILE), stops);
   auto [trips, blocks] = read_trips(load(TRIPS_FILE), routes, traffic_days);
   read_stop_times(load(STOP_TIMES_FILE), trips, stops);
-  fix_stop_positions(trips);
   fix_flixtrain_transfers(trips, transfers);
 
   std::map<category, fbs64::Offset<Category>> fbs_categories;
@@ -434,6 +366,10 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
           }
           return stop_count < 2;
         })  //
+      | utl::remove_if([&](auto const& entry) {
+          // Rule services are written separately.
+          return entry.second->block_ != nullptr;
+        })  //
       | utl::transform([&](auto const& entry) {
           auto const t = entry.second.get();
           return create_service(
@@ -482,10 +418,25 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
                                " (" + feed_pair.second.version_ + ")";
                       });
 
+  std::vector<std::tuple<stop const*, stop const*, transfer>>
+      missing_symmetry_transfers;
+  for (auto const& [p, t] : transfers) {
+    auto const& [from, to] = p;
+    auto const inverse_it = transfers.find({to, from});
+    if (inverse_it == end(transfers)) {
+      l(logging::warn, "adding symmetric transfer: {}({}) -> {}({}): {} min",
+        to->name_, to->id_, from->name_, from->id_, t.minutes_);
+      missing_symmetry_transfers.emplace_back(to, from, t);
+    }
+  }
+  for (auto const& [from, to, t] : missing_symmetry_transfers) {
+    transfers.emplace(stop_pair{from, to}, t);
+  }
+
   auto footpaths =
       utl::all(transfers)  //
       | utl::remove_if([](std::pair<stop_pair, transfer>&& t) {
-          return t.second.type_ != transfer::TIMED_TRANSFER ||
+          return t.second.type_ == transfer::NOT_POSSIBLE ||
                  t.first.first == t.first.second;
         })  //
       | utl::transform([&](std::pair<stop_pair, transfer>&& t) {
@@ -508,11 +459,15 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
       transfers.emplace(stops, transfer{2, transfer::GENERATED});
     }
   };
+
+  utl::parallel_for(stops, [&](auto const& s) {
+    s.second->compute_close_stations(stop_rtree);
+  });
+
   auto const meta_stations =
       utl::all(stops)  //
       | utl::transform([&](auto const& s) {
-          return std::make_pair(s.second.get(),
-                                s.second->get_metas(stop_vec, stop_rtree));
+          return std::make_pair(s.second.get(), s.second->get_metas(stop_vec));
         })  //
       | utl::remove_if([](auto const& s) { return s.second.empty(); })  //
       |

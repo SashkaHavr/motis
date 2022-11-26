@@ -2,7 +2,6 @@ include "address/AddressRequest.fbs";
 include "address/AddressResponse.fbs";
 include "gbfs/GBFSRoutingRequest.fbs";
 include "gbfs/GBFSRoutingResponse.fbs";
-include "gbfs/GBFSGeoJSONResponse.fbs";
 include "gbfs/GBFSProvidersResponse.fbs";
 include "guesser/StationGuesserRequest.fbs";
 include "guesser/StationGuesserResponse.fbs";
@@ -106,6 +105,15 @@ include "paxmon/PaxMonGetInterchangesRequest.fbs";
 include "paxmon/PaxMonGetInterchangesResponse.fbs";
 include "paxmon/PaxMonGetAddressableGroupsRequest.fbs";
 include "paxmon/PaxMonGetAddressableGroupsResponse.fbs";
+include "paxmon/PaxMonKeepAliveRequest.fbs";
+include "paxmon/PaxMonKeepAliveResponse.fbs";
+include "paxmon/PaxMonRerouteGroupsRequest.fbs";
+include "paxmon/PaxMonRerouteGroupsResponse.fbs";
+include "paxmon/PaxMonGroupStatisticsRequest.fbs";
+include "paxmon/PaxMonGroupStatisticsResponse.fbs";
+include "paxmon/PaxMonDebugGraphRequest.fbs";
+include "paxmon/PaxMonDebugGraphResponse.fbs";
+include "paxmon/PaxMonGetUniversesResponse.fbs";
 include "paxforecast/PaxForecastUpdate.fbs";
 include "paxforecast/PaxForecastApplyMeasuresRequest.fbs";
 include "paxforecast/PaxForecastApplyMeasuresResponse.fbs";
@@ -174,7 +182,6 @@ union MsgContent {
   motis.address.AddressResponse                                           = 017,
   motis.gbfs.GBFSRoutingRequest                                           = 018,
   motis.gbfs.GBFSRoutingResponse                                          = 019,
-  motis.gbfs.GBFSGeoJSONResponse                                          = 020,
   motis.guesser.StationGuesserRequest                                     = 023,
   motis.guesser.StationGuesserResponse                                    = 024,
   motis.intermodal.IntermodalRoutingRequest                               = 025,
@@ -286,7 +293,16 @@ union MsgContent {
   motis.paxmon.PaxMonGetAddressableGroupsResponse                         = 131,
   motis.osrm.OSRMManyToManyRequest                                        = 132,
   motis.osrm.OSRMManyToManyResponse                                       = 133,
-  motis.gbfs.GBFSProvidersResponse                                        = 134
+  motis.gbfs.GBFSProvidersResponse                                        = 134,
+  motis.paxmon.PaxMonKeepAliveRequest                                     = 135,
+  motis.paxmon.PaxMonKeepAliveResponse                                    = 136,
+  motis.paxmon.PaxMonRerouteGroupsRequest                                 = 137,
+  motis.paxmon.PaxMonRerouteGroupsResponse                                = 138,
+  motis.paxmon.PaxMonGroupStatisticsRequest                               = 139,
+  motis.paxmon.PaxMonGroupStatisticsResponse                              = 140,
+  motis.paxmon.PaxMonDebugGraphRequest                                    = 141,
+  motis.paxmon.PaxMonDebugGraphResponse                                   = 142,
+  motis.paxmon.PaxMonGetUniversesResponse                                 = 143
 }
 
 // Destination Examples:
