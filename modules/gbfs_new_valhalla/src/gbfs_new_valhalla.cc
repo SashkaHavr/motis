@@ -88,17 +88,17 @@ struct gbfs_new_valhalla::impl {
       document.Parse(route_str.c_str());
       rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
       for (auto& route : document["routes"].GetArray()) {
-        size_t station_id = route["station"]["id"].GetUint64();
+        size_t station_id = route["p"]["id"].GetUint64();
         const auto& station = sched.stations_[station_id];
-        route["station"].AddMember("name", rapidjson::StringRef(station->name_.data()), allocator);
+        route["p"].AddMember("name", rapidjson::StringRef(station->name_.data()), allocator);
         rapidjson::Value pos(rapidjson::kObjectType);
         pos.AddMember("lat", station->lat(), allocator);
         pos.AddMember("lng", station->lng(), allocator);
-        route["station"].AddMember("pos", pos.Move(), allocator);
-        route["station"].EraseMember("id");
+        route["p"].AddMember("pos", pos.Move(), allocator);
+        route["p"].EraseMember("id");
         std::string id_str = std::to_string(station_id);
         temp.push_back(id_str);
-        route["station"].AddMember("id", rapidjson::StringRef(temp.back().c_str()), allocator);
+        route["p"].AddMember("id", rapidjson::StringRef(temp.back().c_str()), allocator);
       }
       document.AddMember("dir", rapidjson::StringRef(dir.c_str()), allocator);
 
@@ -150,9 +150,10 @@ void gbfs_new_valhalla::import(import_dispatcher& reg) {
 void gbfs_new_valhalla::init(motis::module::registry& r) {
   impl_ = std::make_unique<impl>(config_);
 
-  r.subscribe("/init", [&]() { impl_->init(get_sched()); });
+  r.subscribe("/init", [&]() { impl_->init(get_sched()); }, {});
 
-  r.register_op("/gbfs_new_valhalla/route", [&](msg_ptr const& m) { return impl_->route(get_sched(), m); });
+  r.register_op("/gbfs_new_valhalla/route", [&](msg_ptr const& m) { return impl_->route(get_sched(), m); },
+                {kScheduleReadAccess, {to_res_id(global_res_id::GBFS_DATA), ctx::access_t::READ}});
 }
 
 }  // namespace motis::gbfs_new_valhalla
