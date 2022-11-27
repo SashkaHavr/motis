@@ -17,6 +17,8 @@
 #include "net/http/client/client.h"
 #include "geo/point_rtree.h"
 
+#include <fstream>
+
 namespace fbs = flatbuffers;
 using namespace motis::logging;
 using namespace motis::module;
@@ -30,10 +32,39 @@ struct gbfs_new_valhalla::impl {
   explicit impl(config const& c)
       : config_{c} {}
 
+  void create_public_transport_stations_file(schedule const& sched) {
+    auto& stations = sched.stations_;
+    rapidjson::Document document;
+    document.SetObject();
+    rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+    rapidjson::Value locations(rapidjson::kArrayType);
+    for(const auto& s : stations) {
+      rapidjson::Value location(rapidjson::kObjectType);
+      location.AddMember("lat", s->lat(), allocator);
+      location.AddMember("lon", s->lng(), allocator);
+      location.AddMember("gbfs_transport_station_id", s->index_, allocator);
+      locations.PushBack(location.Move(), allocator);
+    }
+    document.AddMember("locations", locations.Move(), allocator);
+
+    rapidjson::StringBuffer buffer;
+    buffer.Clear();
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    document.Accept(writer);
+    std::string request_string = buffer.GetString();
+
+    std::ofstream file("stations_file.json");
+    file << request_string;
+    file.close();
+  }
+
   void init(schedule const& sched) {
     pt_stations_rtree_ = geo::make_point_rtree(sched.stations_, [](auto const& s) {
         return geo::latlng{s->lat(), s->lng()};
       });
+    if(config_.create_stations_file_on_init) {
+      create_public_transport_stations_file(sched);
+    }
     LOG(logging::info) << "GBFS initialized";
   }
 
@@ -59,15 +90,18 @@ struct gbfs_new_valhalla::impl {
       start_location.AddMember("lat", x.lat_, allocator);
       start_location.AddMember("lon", x.lng_, allocator);
       locations.PushBack(start_location.Move(), allocator);
+      document.AddMember("locations", locations.Move(), allocator);
+
+      rapidjson::Value stations_json(rapidjson::kArrayType);
       for (const auto s : stations) {
         const auto& station = sched.stations_[s];
         rapidjson::Value location(rapidjson::kObjectType);
         location.AddMember("lat", station->lat(), allocator);
         location.AddMember("lon", station->lng(), allocator);
         location.AddMember("gbfs_transport_station_id", s, allocator);
-        locations.PushBack(location.Move(), allocator);
+        stations_json.PushBack(location.Move(), allocator);
       }
-      document.AddMember("locations", locations.Move(), allocator);
+      document.AddMember("targets", stations_json.Move(), allocator);
       document.AddMember("is_forward", req->dir() == SearchDir_Forward, allocator);
       document.AddMember("gbfs_max_duration", duration, allocator);
 
@@ -129,6 +163,8 @@ struct gbfs_new_valhalla::impl {
 gbfs_new_valhalla::gbfs_new_valhalla() : module("gbfs_new_valhalla", "gbfs_new_valhalla") {
   param(config_.valhalla_server_url, "valhalla_server_url",
         "Url of valhalla server");
+  param(config_.create_stations_file_on_init, "create_stations_file_on_init",
+        "Create file with station ids and lat,lng when module is initialized");
 }
 
 gbfs_new_valhalla::~gbfs_new_valhalla() = default;

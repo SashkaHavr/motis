@@ -9,6 +9,7 @@
 namespace motis::gbfs_new_valhalla {
 
 struct config {
+  bool create_stations_file_on_init = false;
   std::string valhalla_server_url = "http://localhost:8002/";
 
   std::string gbfs_route_url() const {
