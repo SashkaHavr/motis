@@ -76,7 +76,7 @@ struct gbfs_new_valhalla::impl {
     auto const req = motis_content(GBFSRoutingRequest, m);
 
     auto const duration = req->max_bike_duration() * 60;
-    auto const dist = req->max_bike_duration() * 60 * 10; // use bike duration as total time for now
+    auto const dist = req->max_bike_duration() * 60 * 10; // use much bigger area for now
     auto const x = from_fbs(req->x());
     auto const stations = pt_stations_rtree_.in_radius(x, dist);
     std::string dir = req->dir() == SearchDir_Forward ? "Forward" : "Backward";
@@ -103,7 +103,8 @@ struct gbfs_new_valhalla::impl {
       }
       document.AddMember("targets", stations_json.Move(), allocator);
       document.AddMember("is_forward", req->dir() == SearchDir_Forward, allocator);
-      document.AddMember("gbfs_max_duration", duration, allocator);
+      document.AddMember("gbfs_max_foot_duration", req->max_foot_duration(), allocator);
+      document.AddMember("gbfs_max_bike_duration", req->max_bike_duration(), allocator);
 
       rapidjson::StringBuffer buffer;
       buffer.Clear();

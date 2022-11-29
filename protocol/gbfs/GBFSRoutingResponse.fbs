@@ -40,7 +40,8 @@ table StationBikeRoute {
 // ----------------------------------------------------------------------------
 // Routes
 // ----------------------------------------------------------------------------
-union BikeRoute { FreeBikeRoute, StationBikeRoute }
+table FootRoute {}
+union BikeRoute { FreeBikeRoute, StationBikeRoute, FootRoute }
 
 table Direct { pos: Position; }
 
