@@ -121,6 +121,9 @@ struct gbfs_new_valhalla::impl {
     {
       rapidjson::Document document;
       document.Parse(route_str.c_str());
+      if(document.HasMember("error_code")) {
+        return empty_response(req->dir() );
+      }
       rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
       for (auto& route : document["routes"].GetArray()) {
         size_t station_id = route["p"]["id"].GetUint64();
@@ -131,7 +134,7 @@ struct gbfs_new_valhalla::impl {
         pos.AddMember("lng", station->lng(), allocator);
         route["p"].AddMember("pos", pos.Move(), allocator);
         route["p"].EraseMember("id");
-        std::string id_str = std::to_string(station_id);
+        std::string id_str = std::string(sched.stations_.at(station_id)->eva_nr_);
         temp.push_back(id_str);
         route["p"].AddMember("id", rapidjson::StringRef(temp.back().c_str()), allocator);
       }
@@ -155,6 +158,17 @@ struct gbfs_new_valhalla::impl {
     }
 
     return make_msg(result_str, true);
+  }
+
+  msg_ptr empty_response(SearchDir const dir) {
+    message_creator fbb;
+    fbb.create_and_finish(
+        MsgContent_GBFSRoutingResponse,
+        CreateGBFSRoutingResponse(
+            fbb, dir,
+            fbb.CreateVector(std::vector<flatbuffers::Offset<RouteInfo>>{}))
+            .Union());
+    return make_msg(fbb);
   }
 
   config const& config_;
