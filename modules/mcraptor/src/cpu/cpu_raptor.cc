@@ -18,6 +18,22 @@ void mc_raptor<T, L>::arrival_by_route(stop_id stop, L& new_label) {
       return;
     }
   }
+  /*for(stop_id target : this->targets()) {
+    size_t removed = 0;
+    for (size_t i = 0; i < transfer_labels_[target].labels_.size() - removed; i++) {
+      if (transfer_labels_[target].labels_[i].arrival_time_ == new_label.arrival_time_ && new_label.parent_station_ == target) {
+        if(new_label.dominates(transfer_labels_[target].labels_[i])) {
+          std::swap(transfer_labels_[target].labels_[transfer_labels_[target].labels_.size() - removed - 1], transfer_labels_[target].labels_[i]);
+          removed++;
+          i--;
+        }
+      }
+    }
+    if(removed != 0) {
+      transfer_labels_[target].labels_.resize(transfer_labels_[target].labels_.size() - removed + 1);
+      transfer_labels_[target].labels_.back() = new_label;
+    }
+  }*/
   if(!route_labels_[stop].merge(new_label)) {
     return;
   }
@@ -37,6 +53,22 @@ void mc_raptor<T, L>::arrival_by_transfer(stop_id stop, L& new_label) {
       return;
     }
   }
+  /*for(stop_id target : this->targets()) {
+    size_t removed = 0;
+    for (size_t i = 0; i < transfer_labels_[target].labels_.size() - removed; i++) {
+      if (transfer_labels_[target].labels_[i].arrival_time_ == new_label.arrival_time_ && new_label.parent_station_ == target) {
+        if(new_label.dominates(transfer_labels_[target].labels_[i])) {
+          std::swap(transfer_labels_[target].labels_[transfer_labels_[target].labels_.size() - removed - 1], transfer_labels_[target].labels_[i]);
+          removed++;
+          i--;
+        }
+      }
+    }
+    if(removed != 0) {
+      transfer_labels_[target].labels_.resize(transfer_labels_[target].labels_.size() - removed + 1);
+      transfer_labels_[target].labels_.back() = new_label;
+    }
+  }*/
   if(!transfer_labels_[stop].merge(new_label)) {
     return;
   }
@@ -203,11 +235,11 @@ void mc_raptor<T, L>::set_query_source_time(time other_time) {
 template <class T, class L>
 void mc_raptor<T, L>::reset() {
   round_ = -1;
-  //route_labels_.resize(0);
-  //route_labels_.resize(query_.tt_.stop_count());
-  //transfer_labels_.resize(0);
-  //transfer_labels_.resize(query_.tt_.stop_count());
-  //routes_serving_updated_stops_.clear();
+  route_labels_.resize(0);
+  route_labels_.resize(query_.tt_.stop_count());
+  transfer_labels_.resize(0);
+  transfer_labels_.resize(query_.tt_.stop_count());
+  routes_serving_updated_stops_.clear();
   stops_for_routes_.reset();
   stops_for_transfers_.reset();
   result_.reset();
@@ -217,6 +249,8 @@ template <class T, class L>
 void mc_raptor<T, L>::invoke_cpu_raptor() {
   /*std::cout << "Target: " << query_.target_ << std::endl;
   std::cout << "Source: " << query_.source_ << std::endl;*/
+
+  //std::cout << "Initial query time in mcraptor: " << query_.source_time_begin_  << " and in query: " << query_.source_time_begin_ << "\n";
 
   init_arrivals();
   relax_transfers();
@@ -247,7 +281,6 @@ std::vector<stop_id> mc_raptor<T, L>::targets() {
 
 void mc_raptor_departure::init_arrivals() {
   start_new_round();
-
   if (query_.source_ == 0) {
     for (raptor_edge edge : query_.raptor_edges_start_) {
       // std::cout << "EDGE from: " << edge.from_ << "; to: " << edge.to_ << "; time: " << edge.time_ << std::endl;
@@ -321,7 +354,8 @@ void mc_raptor_departure::scan_route(stop_id stop, route_stops_index stop_offset
       new_label.arrival_time_ = r_label.trip_[stop_offset].arrival_;
       new_label.parent_station_ = r_label.parent_stop_;
       new_label.parent_label_index_ = r_label.parent_label_index_;
-      new_label.parent_departure_time_ = r_label.trip_[r_label.parent_stop_].departure_;
+      // TODO: check parent_label_index is correct
+      new_label.parent_departure_time_ = r_label.trip_[r_label.parent_label_index_].departure_;
       new_label.route_id_ = route_id;
       new_label.stop_offset_ = stop_offset;
       new_label.current_trip_id_ = r_label.current_trip_id_;

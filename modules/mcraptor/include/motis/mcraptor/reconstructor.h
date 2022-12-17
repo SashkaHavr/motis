@@ -38,27 +38,32 @@ struct intermediate_journey {
                              0);
   }
 
-  void add_start_footpath(stop_id to, time to_d_time, time const duration, raptor_meta_info const& raptor_sched) {
+  void add_start_footpath(stop_id to, time to_d_time, time const duration,
+                          raptor_meta_info const& raptor_sched) {
     auto const motis_index_to = raptor_sched.station_id_to_index_[to];
     auto const motis_index_START = raptor_sched.station_id_to_index_[0];
     auto const enter = !transports_.empty() && !transports_.back().is_walk();
     auto const d_track =
         enter ? transports_.back().con_->full_con_->d_track_ : 0;
-    stops_.emplace_back(stops_.size(), motis_index_to, 0, d_track, 0, d_track, to_d_time - 2, to_d_time,
-                        to_d_time - 2, to_d_time, timestamp_reason::SCHEDULE,
-                        timestamp_reason::SCHEDULE, false, enter);
-    stops_.emplace_back(stops_.size(), motis_index_START, 0, 0, 0, 0, INVALID_TIME, to_d_time - duration - 2,
-                        INVALID_TIME, to_d_time - duration - 2, timestamp_reason::SCHEDULE,
+    stops_.emplace_back(stops_.size(), motis_index_to, 0, d_track, 0, d_track,
+                        to_d_time - 2, to_d_time, to_d_time - 2, to_d_time,
+                        timestamp_reason::SCHEDULE, timestamp_reason::SCHEDULE,
+                        false, enter);
+    stops_.emplace_back(stops_.size(), motis_index_START, 0, 0, 0, 0,
+                        INVALID_TIME, to_d_time - duration - 2, INVALID_TIME,
+                        to_d_time - duration - 2, timestamp_reason::SCHEDULE,
                         timestamp_reason::SCHEDULE, false, false);
     transports_.emplace_back(stops_.size() - 1, stops_.size(), duration, 0, 0,
                              0);
   }
 
-  void add_end_footpath(time const a_time, time const duration, raptor_meta_info const& raptor_sched) {
+  void add_end_footpath(time const a_time, time const duration,
+                        raptor_meta_info const& raptor_sched) {
     auto const motis_index = raptor_sched.station_id_to_index_[1];
-    stops_.emplace_back(stops_.size(), motis_index, 0, 0, 0, 0, a_time, INVALID_TIME,
-                        a_time, INVALID_TIME, timestamp_reason::SCHEDULE,
-                        timestamp_reason::SCHEDULE, false, false);
+    stops_.emplace_back(stops_.size(), motis_index, 0, 0, 0, 0, a_time,
+                        INVALID_TIME, a_time, INVALID_TIME,
+                        timestamp_reason::SCHEDULE, timestamp_reason::SCHEDULE,
+                        false, false);
     transports_.emplace_back(stops_.size() - 1, stops_.size(), duration, 0, 0,
                              0);
   }
@@ -92,7 +97,8 @@ struct intermediate_journey {
 
       // we is_exit at the last station -> d_time is invalid
       if (!valid(d_time) || s_offset == exit_offset) {
-        if (transports_.empty() || transports_.back().is_walk() || transports_.back().mumo_id_ == -1) {
+        if (transports_.empty() || transports_.back().is_walk() ||
+            transports_.back().mumo_id_ == -1) {
           d_time = a_time;
         } else {
           d_time = transports_.back().con_->d_time_;
@@ -100,7 +106,8 @@ struct intermediate_journey {
       }
 
       auto const& get_d_track = [&](auto&& lcon) {
-        if (transports_.empty() || transports_.back().is_walk() || transports_.back().mumo_id_ == -1) {
+        if (transports_.empty() || transports_.back().is_walk() ||
+            transports_.back().mumo_id_ == -1) {
           return lcon->full_con_->d_track_;
         } else {
           return transports_.back().con_->full_con_->d_track_;
@@ -226,93 +233,102 @@ struct reconstructor {
     return (ij.get_arrival() <= c.arrival_ && ij.transfers_ <= c.transfers_);
   }
 
-//  template <typename Query>
-//  std::vector<candidate> get_candidates(Query const& q) {
-//    rounds& result = q.result();
-//
-//    std::vector<candidate> candidates;
-//
-//    auto add_candidates = [&](stop_id const t) {
-//      auto const tt = raptor_sched_.transfer_times_[t];
-//
-//      for (auto round_k = 1; round_k < max_raptor_round; ++round_k) {
-//        if (!result[round_k][t].is_valid()) {
-//          continue;
-//        }
-//
-//        auto c = candidate{q.source_,
-//                           t,
-//                           q.source_time_begin_,
-//                           result[round_k][t].get_earliest_arrival_time(),
-//                           static_cast<transfers>(round_k - 1),
-//                           true};
-//
-//        // Check if the journey ends with a footpath
-//        for (; c.arrival_ < result[round_k][t].get_earliest_arrival_time() + tt; c.arrival_++) {
-//          c.ends_with_footpath_ = journey_ends_with_footpath(c, result);
-//          if (!c.ends_with_footpath_) {
-//            break;
-//          }
-//        }
-//
-//        c.arrival_ -= tt;
-//
-//        auto dominated = std::any_of(
-//            std::begin(candidates), std::end(candidates),
-//            [&](auto const& other_c) { return other_c.dominates(c); });
-//
-//        dominated |=
-//            std::any_of(std::begin(journeys_), std::end(journeys_),
-//                        [&](auto const& j) { return dominates(j, c); });
-//
-//        if (!dominated) {
-//          // Remove earlier candidates which are dominated by the new candidate.
-//          utl::erase_if(candidates, [&](auto const& other_c) {
-//            return c.dominates(other_c);
-//          });
-//
-//          candidates.push_back(c);
-//        }
-//      }
-//    };
-//
-//    if (!q.use_dest_metas_) {
-//      add_candidates(q.target_);
-//    } else {
-//      for (auto const& c : raptor_sched_.equivalent_stations_[q.target_]) {
-//        add_candidates(c);
-//      }
-//    }
-//
-//    return candidates;
-//  }
+  //  template <typename Query>
+  //  std::vector<candidate> get_candidates(Query const& q) {
+  //    rounds& result = q.result();
+  //
+  //    std::vector<candidate> candidates;
+  //
+  //    auto add_candidates = [&](stop_id const t) {
+  //      auto const tt = raptor_sched_.transfer_times_[t];
+  //
+  //      for (auto round_k = 1; round_k < max_raptor_round; ++round_k) {
+  //        if (!result[round_k][t].is_valid()) {
+  //          continue;
+  //        }
+  //
+  //        auto c = candidate{q.source_,
+  //                           t,
+  //                           q.source_time_begin_,
+  //                           result[round_k][t].get_earliest_arrival_time(),
+  //                           static_cast<transfers>(round_k - 1),
+  //                           true};
+  //
+  //        // Check if the journey ends with a footpath
+  //        for (; c.arrival_ < result[round_k][t].get_earliest_arrival_time() +
+  //        tt; c.arrival_++) {
+  //          c.ends_with_footpath_ = journey_ends_with_footpath(c, result);
+  //          if (!c.ends_with_footpath_) {
+  //            break;
+  //          }
+  //        }
+  //
+  //        c.arrival_ -= tt;
+  //
+  //        auto dominated = std::any_of(
+  //            std::begin(candidates), std::end(candidates),
+  //            [&](auto const& other_c) { return other_c.dominates(c); });
+  //
+  //        dominated |=
+  //            std::any_of(std::begin(journeys_), std::end(journeys_),
+  //                        [&](auto const& j) { return dominates(j, c); });
+  //
+  //        if (!dominated) {
+  //          // Remove earlier candidates which are dominated by the new
+  //          candidate. utl::erase_if(candidates, [&](auto const& other_c) {
+  //            return c.dominates(other_c);
+  //          });
+  //
+  //          candidates.push_back(c);
+  //        }
+  //      }
+  //    };
+  //
+  //    if (!q.use_dest_metas_) {
+  //      add_candidates(q.target_);
+  //    } else {
+  //      for (auto const& c : raptor_sched_.equivalent_stations_[q.target_]) {
+  //        add_candidates(c);
+  //      }
+  //    }
+  //
+  //    return candidates;
+  //  }
 
   template <class L>
   void add(raptor_query<L> const& q) {
-//    for (auto& c : get_candidates(q)) {
-//      if (!c.ends_with_footpath_) {
-//        // We need to add the transfer time to the arrival,
-//        // since all arrivals in the results are with pre-added transfer times.
-//        // But only if the journey does not end with a footpath,
-//        // since footpaths have no pre-added transfer times.
-//        c.arrival_ += raptor_sched_.transfer_times_[c.target_];
-//      }
-//
-//      journeys_.push_back(reconstruct_journey(c, q));
-//    }
-
-
-//TODO reproduce another ij assignments from reconstruct_journey, fix bugs
+    //    for (auto& c : get_candidates(q)) {
+    //      if (!c.ends_with_footpath_) {
+    //        // We need to add the transfer time to the arrival,
+    //        // since all arrivals in the results are with pre-added transfer
+    //        times.
+    //        // But only if the journey does not end with a footpath,
+    //        // since footpaths have no pre-added transfer times.
+    //        c.arrival_ += raptor_sched_.transfer_times_[c.target_];
+    //      }
+    //
+    //      journeys_.push_back(reconstruct_journey(c, q));
+    //    }
     rounds<L>& result = q.result();
+
+    /*std::vector<L&> final_labels = {};
     for(stop_id target : q.targets_) {
+      for (L& l : result.getAllLabelsForStop(target, max_raptor_round * 2)) {
+
+      }
+    }*/
+
+    // TODO reproduce another ij assignments from reconstruct_journey, fix bugs
+    for (stop_id target : q.targets_) {
       for (L& l : result.getAllLabelsForStop(target, max_raptor_round * 2)) {
         intermediate_journey ij = intermediate_journey(
             l.changes_count_, q.ontrip_, q.source_time_begin_);
 
-        if(q.target_ == 1) {
-          for(raptor_edge edge : q.raptor_edges_end_) {
-            if(edge.from_ == target) {
-              ij.add_end_footpath(l.arrival_time_ + edge.duration_, edge.duration_, raptor_sched_);
+        if (q.target_ == 1) {
+          for (raptor_edge edge : q.raptor_edges_end_) {
+            if (edge.from_ == target) {
+              ij.add_end_footpath(l.arrival_time_ + edge.duration_,
+                                  edge.duration_, raptor_sched_);
               break;
             }
           }
@@ -360,16 +376,70 @@ struct reconstructor {
           ij.add_start_station(current_station, raptor_sched_, last_departure);
         }
 
-        /*if(std::find_if(journeys_.begin(), journeys_.end(), [&ij](intermediate_journey j) {
-              return j.get_arrival() == ij.get_arrival() &&
-                     j.get_departure() == ij.get_departure() &&
+        /*if(std::find_if(journeys_.begin(), journeys_.end(),
+        [&ij](intermediate_journey j) { return j.get_arrival() ==
+        ij.get_arrival() && j.get_departure() == ij.get_departure() &&
                      j.get_duration() == ij.get_duration();
             } ) == journeys_.end()) {
           journeys_.push_back(ij);
         }*/
+        /*size_t journeys_count_ = journeys_.size();
+
+        if(journeys_count_ > 0) {
+          std::remove_if(journeys_.begin(), journeys_.end(),
+                         [&ij](intermediate_journey j) {
+                           return ij.get_arrival() <= j.get_arrival();
+                                  //ij.get_departure() >= j.get_departure() ||
+                                  //ij.transfers_ <= j.transfers_;
+                         });
+        }
+
+        if(journeys_count_ == 0 || journeys_.size() != journeys_count_) {
+          journeys_.push_back(ij);
+        }*/
+        /*if(std::find_if(journeys_.begin(), journeys_.end(),
+        [&ij](intermediate_journey j) { return ij.get_arrival() <=
+        j.get_arrival() || ij.get_departure() >= j.get_departure() ||
+        ij.transfers_ <= j.transfers_;
+            }) == journeys_.end() && journeys_.size() > 0) {
+          continue;
+        } else {
+          journeys_.repl
+          std::replace(journeys_.begin(), journeys_.end(), ).clear();
+          journeys_.push_back(ij);
+        }*/
+
+        /*bool some_removed = false;
+        std::vector<intermediate_journey> jrns_ = {};
+        for(size_t i = 0; i < journeys_.size(); ++i) {
+          if (ij.get_arrival() <= journeys_[i].get_arrival() &&
+              ij.transfers_ <= journeys_[i].transfers_ &&
+              (ij.get_arrival() < journeys_[i].get_arrival() ||
+              ij.transfers_ < journeys_[i].transfers_)) {
+            std::copy(journeys_.begin(), journeys_.begin() + i, jrns_.begin());
+            std::copy(journeys_.begin() + i + 1, journeys_.end(), jrns_.end());
+            some_removed = true;
+            // insert journeys=jrns_ here
+            journeys_ = jrns_;
+            jrns_.clear();
+          }
+        }
+
+        if(journeys_.empty() || some_removed) {
+          journeys_.push_back(ij);
+        }
+        jrns_.clear();*/
+
+        /*if(journeys_.empty()) {
+          journeys_.push_back(ij);
+        }
+        if(ij.get_arrival() <= journeys_[journeys_.size() - 1].get_arrival() &&
+        ij.transfers_ <= journeys_[journeys_.size() - 1].transfers_) {
+          journeys_.pop_back();
+          journeys_.push_back(ij);
+        }*/
 
         journeys_.push_back(ij);
-
       }
     }
   }
@@ -378,6 +448,102 @@ struct reconstructor {
     utl::erase_if(journeys_, [&](auto const& ij) {
       return ij.get_duration() > max_travel_duration;
     });
+
+    /*auto end = journeys_.end();
+    for (auto i = journeys_.begin(); i < end; ++i) {
+      intermediate_journey ij_temp = *i;
+      end = std::remove_if(
+          journeys_.begin(), journeys_.end(),
+          [&](intermediate_journey journey) {
+            if (ij_temp.get_arrival() == journey.get_arrival()) {
+              if (ij_temp.transfers_ <= journey.transfers_ &&
+                  ij_temp.get_departure() >= journey.get_departure()) {
+                return false;
+              } else {
+                return true;
+              }
+            } else {
+              return true;
+            }
+          });
+    }*/
+
+    // TODO: Count journeys with the same time that are not dominating each
+    // other as well Remove journeys with the same time and keep only the best
+    // one for this time
+    std::vector<intermediate_journey> journeys_new = {};
+    std::vector<size_t> counted_arrivals = {};
+    intermediate_journey* best_arrival_journey = nullptr;
+    std::vector<intermediate_journey*> best_arrival_journeys = {};
+    for (auto i = journeys_.begin(); i < journeys_.end(); ++i) {
+      // for arrival time
+      if (!(std::find(counted_arrivals.begin(), counted_arrivals.end(),
+                      i->get_arrival()) != counted_arrivals.end())) {
+        best_arrival_journey = i.operator->();
+        for (auto j = i + 1; j < journeys_.end(); ++j) {
+          if (j->get_arrival() == best_arrival_journey->get_arrival()) {
+            // Fully dominating
+            if (j->transfers_ <= best_arrival_journey->transfers_ &&
+                j->get_departure() >= best_arrival_journey->get_departure()) {
+              best_arrival_journey = j.operator->();
+              best_arrival_journeys.clear();
+              // Dominating only in one criterion
+            } else if ((j->transfers_ <= best_arrival_journey->transfers_ &&
+                        j->get_departure() <=
+                            best_arrival_journey->get_departure()) ||
+                       (j->transfers_ >= best_arrival_journey->transfers_ &&
+                        j->get_departure() >=
+                            best_arrival_journey->get_departure())) {
+              best_arrival_journeys.push_back(j.operator->());
+            }
+          }
+        }
+        counted_arrivals.push_back(i->get_arrival());
+        for(auto& journey: best_arrival_journeys) {
+          journeys_new.push_back(*journey);
+        }
+        journeys_new.push_back(*best_arrival_journey);
+        best_arrival_journeys.clear();
+      }
+    }
+    journeys_ = journeys_new;
+    journeys_new.clear();
+
+    std::vector<size_t> counted_departures = {};
+    intermediate_journey* best_departure_journey = nullptr;
+    std::vector<intermediate_journey*> best_departure_journeys = {};
+    for (auto i = journeys_.begin(); i < journeys_.end(); ++i) {
+      // for departure time
+      if (!(std::find(counted_departures.begin(), counted_departures.end(),
+                      i->get_departure()) != counted_departures.end())) {
+        best_departure_journey = i.operator->();
+        for (auto j = i + 1; j < journeys_.end(); ++j) {
+          if (j->get_departure() == best_departure_journey->get_departure()) {
+            if (j->transfers_ <= best_departure_journey->transfers_ &&
+                j->get_arrival() <= best_departure_journey->get_arrival()) {
+              best_departure_journey = j.operator->();
+              best_departure_journeys.clear();
+            } else if ((j->transfers_ <= best_arrival_journey->transfers_ &&
+                        j->get_arrival() >=
+                            best_arrival_journey->get_arrival()) ||
+                       (j->transfers_ >= best_arrival_journey->transfers_ &&
+                        j->get_arrival() <=
+                            best_arrival_journey->get_arrival())) {
+              best_departure_journeys.push_back(j.operator->());
+            }
+          }
+        }
+        counted_departures.push_back(i->get_departure());
+        for(auto& journey: best_departure_journeys) {
+          journeys_new.push_back(*journey);
+        }
+        journeys_new.push_back(*best_departure_journey);
+        best_departure_journeys.clear();
+      }
+    }
+    journeys_ = journeys_new;
+    journeys_new.clear();
+
     for (auto& ij : journeys_) {
       ij.finalize();
     }
@@ -396,202 +562,221 @@ struct reconstructor {
     return utl::to_vec(journeys_,
                        [&](auto& ij) { return ij.to_journey(sched_); });
   }
-//
-//  bool journey_ends_with_footpath(candidate const c,
-//                                  rounds& result) {
-//    return !valid(std::get<stop_id>(
-//        get_previous_station(c.target_, c.arrival_, c.transfers_ + 1, result)));
-//  }
-//
-//  template <typename Query>
-//  intermediate_journey reconstruct_journey(candidate const c, Query const& q) {
-//    rounds& result = q.result();
-//
-//    auto ij =
-//        intermediate_journey{c.transfers_, q.ontrip_, q.source_time_begin_};
-//
-//    auto arrival_station = c.target_;
-//    auto last_departure = invalid<time>;
-//    auto station_arrival = c.arrival_;
-//    for (auto result_idx = c.transfers_ + 1; result_idx > 0; --result_idx) {
-//      // TODO(julian) possible to skip this if station arrival at index larger
-//      // than last departure minus transfertime,
-//      // same with footpath reachable stations
-//      auto [previous_station, used_route, used_trip, stop_offset] =
-//          get_previous_station(arrival_station, station_arrival, result_idx,
-//                               result);
-//
-//      if (valid(previous_station)) {
-//        last_departure = ij.add_route(previous_station, used_route, used_trip,
-//                                      stop_offset, raptor_sched_, timetable_);
-//      } else {
-//        for (auto const& inc_f :
-//             timetable_.incoming_footpaths_[arrival_station]) {
-//          auto const adjusted_arrival = station_arrival - inc_f.duration_;
-//          std::tie(previous_station, used_route, used_trip, stop_offset) =
-//              get_previous_station(inc_f.from_, adjusted_arrival, result_idx,
-//                                   result);
-//
-//          if (valid(previous_station)) {
-//            ij.add_footpath(arrival_station, station_arrival, last_departure,
-//                            inc_f.duration_, raptor_sched_);
-//            last_departure =
-//                ij.add_route(previous_station, used_route, used_trip,
-//                             stop_offset, raptor_sched_, timetable_);
-//            break;
-//          }
-//        }
-//      }
-//
-//      if(!valid(previous_station)) {
-//        break;
-//      }
-//
-//      arrival_station = previous_station;
-//      station_arrival = result[result_idx - 1][arrival_station].get_earliest_arrival_time();
-//    }
-//
-//    bool can_be_start = false;
-//    if (!q.use_start_metas_) {
-//      can_be_start = arrival_station == c.source_;
-//    } else {
-//      can_be_start = contains(raptor_sched_.equivalent_stations_[c.source_],
-//                              arrival_station);
-//    }
-//
-//    if (can_be_start) {
-//      ij.add_start_station(arrival_station, raptor_sched_, last_departure);
-//    } else {
-//      // If we use start meta stations we need to search for the best one.
-//      // We need to search for the start meta station with the best departure
-//      // time. The best departure time is the latest one.
-//
-//      auto const get_start_departure = [&](stop_id const start_station) {
-//        for (auto const& f : timetable_.incoming_footpaths_[arrival_station]) {
-//          if (f.from_ != start_station) {
-//            continue;
-//          }
-//
-//          time const first_footpath_duration =
-//              f.duration_ + raptor_sched_.transfer_times_[start_station];
-//
-//          return static_cast<time>(last_departure - first_footpath_duration);
-//        }
-//
-//        return invalid<time>;
-//      };
-//
-//      auto const add_start_with_footpath = [&](stop_id const start_station) {
-//        for (auto const& f : timetable_.incoming_footpaths_[arrival_station]) {
-//          if (f.from_ != start_station) {
-//            continue;
-//          }
-//
-//          ij.add_footpath(arrival_station, last_departure, last_departure,
-//                          f.duration_, raptor_sched_);
-//
-//          auto const first_footpath_duration =
-//              f.duration_ + raptor_sched_.transfer_times_[start_station];
-//          ij.add_start_station(start_station, raptor_sched_,
-//                               last_departure - first_footpath_duration);
-//        }
-//      };
-//
-//      if (!q.use_start_metas_) {
-//        add_start_with_footpath(c.source_);
-//      } else {
-//        auto const& equivalents = raptor_sched_.equivalent_stations_[c.source_];
-//        auto const best_station = *std::max_element(
-//            std::begin(equivalents), std::end(equivalents),
-//            [&](auto const& s1, auto const& s2) -> bool {
-//              return get_start_departure(s1) < get_start_departure(s2);
-//            });
-//        add_start_with_footpath(best_station);
-//      }
-//    }
-//
-//    return ij;
-//  }
-//
-//  std::tuple<stop_id, route_id, trip_id, stop_offset> get_previous_station(
-//      stop_id const arrival_station, time const stop_arrival,
-//      uint8_t const result_idx, rounds& result) {
-//    auto const arrival_stop = timetable_.stops_[arrival_station];
-//
-//    auto const route_count = arrival_stop.route_count_;
-//    for (auto sri = arrival_stop.index_to_stop_routes_;
-//         sri < arrival_stop.index_to_stop_routes_ + route_count; ++sri) {
-//      auto const r_id = timetable_.stop_routes_[sri];
-//      auto const& route = timetable_.routes_[r_id];
-//
-//      for (stop_offset offset = 1; offset < route.stop_count_; ++offset) {
-//        auto const rsi = route.index_to_route_stops_ + offset;
-//        auto const s_id = timetable_.route_stops_[rsi];
-//        if (s_id != arrival_station) {
-//          continue;
-//        }
-//
-//        auto const arrival_trip =
-//            get_arrival_trip_at_station(r_id, stop_arrival, offset);
-//
-//        if (!valid(arrival_trip)) {
-//          continue;
-//        }
-//
-//        auto const board_station = get_board_station_for_trip(
-//            r_id, arrival_trip, result, result_idx - 1, offset);
-//
-//        if (valid(board_station)) {
-//          return {board_station, r_id, arrival_trip, offset};
-//        }
-//      }
-//    }
-//
-//    return {invalid<stop_id>, invalid<route_id>, invalid<trip_id>,
-//            invalid<stop_offset>};
-//  }
-//
-//  trip_id get_arrival_trip_at_station(route_id const r_id, time const arrival,
-//                                      stop_offset const offset) {
-//    auto const& route = timetable_.routes_[r_id];
-//
-//    for (auto trip = 0; trip < route.trip_count_; ++trip) {
-//      auto const sti =
-//          route.index_to_stop_times_ + (trip * route.stop_count_) + offset;
-//      if (timetable_.stop_times_[sti].arrival_ == arrival) {
-//        return trip;
-//      }
-//    }
-//
-//    return invalid<trip_id>;
-//  }
-//
-//  stop_id get_board_station_for_trip(route_id const r_id, trip_id const t_id,
-//                                     rounds& result,
-//                                     raptor_round const result_idx,
-//                                     stop_offset const arrival_offset) {
-//    auto const& r = timetable_.routes_[r_id];
-//
-//    auto const first_stop_times_index =
-//        r.index_to_stop_times_ + (t_id * r.stop_count_);
-//
-//    // -1, since we cannot board a trip at the last station
-//    auto const max_offset =
-//        std::min(static_cast<stop_offset>(r.stop_count_ - 1), arrival_offset);
-//    for (auto stop_offset = 0; stop_offset < max_offset; ++stop_offset) {
-//      auto const rsi = r.index_to_route_stops_ + stop_offset;
-//      auto const stop_id = timetable_.route_stops_[rsi];
-//
-//      auto const sti = first_stop_times_index + stop_offset;
-//      auto const departure = timetable_.stop_times_[sti].departure_;
-//
-//      if (valid(departure) && result[result_idx][stop_id].get_earliest_arrival_time() <= departure) {
-//        return stop_id;
-//      }
-//    }
-//
-//    return invalid<stop_id>;
-//  }
+  //
+  //  bool journey_ends_with_footpath(candidate const c,
+  //                                  rounds& result) {
+  //    return !valid(std::get<stop_id>(
+  //        get_previous_station(c.target_, c.arrival_, c.transfers_ + 1,
+  //        result)));
+  //  }
+  //
+  //  template <typename Query>
+  //  intermediate_journey reconstruct_journey(candidate const c, Query const&
+  //  q) {
+  //    rounds& result = q.result();
+  //
+  //    auto ij =
+  //        intermediate_journey{c.transfers_, q.ontrip_, q.source_time_begin_};
+  //
+  //    auto arrival_station = c.target_;
+  //    auto last_departure = invalid<time>;
+  //    auto station_arrival = c.arrival_;
+  //    for (auto result_idx = c.transfers_ + 1; result_idx > 0; --result_idx) {
+  //      // TODO(julian) possible to skip this if station arrival at index
+  //      larger
+  //      // than last departure minus transfertime,
+  //      // same with footpath reachable stations
+  //      auto [previous_station, used_route, used_trip, stop_offset] =
+  //          get_previous_station(arrival_station, station_arrival, result_idx,
+  //                               result);
+  //
+  //      if (valid(previous_station)) {
+  //        last_departure = ij.add_route(previous_station, used_route,
+  //        used_trip,
+  //                                      stop_offset, raptor_sched_,
+  //                                      timetable_);
+  //      } else {
+  //        for (auto const& inc_f :
+  //             timetable_.incoming_footpaths_[arrival_station]) {
+  //          auto const adjusted_arrival = station_arrival - inc_f.duration_;
+  //          std::tie(previous_station, used_route, used_trip, stop_offset) =
+  //              get_previous_station(inc_f.from_, adjusted_arrival,
+  //              result_idx,
+  //                                   result);
+  //
+  //          if (valid(previous_station)) {
+  //            ij.add_footpath(arrival_station, station_arrival,
+  //            last_departure,
+  //                            inc_f.duration_, raptor_sched_);
+  //            last_departure =
+  //                ij.add_route(previous_station, used_route, used_trip,
+  //                             stop_offset, raptor_sched_, timetable_);
+  //            break;
+  //          }
+  //        }
+  //      }
+  //
+  //      if(!valid(previous_station)) {
+  //        break;
+  //      }
+  //
+  //      arrival_station = previous_station;
+  //      station_arrival = result[result_idx -
+  //      1][arrival_station].get_earliest_arrival_time();
+  //    }
+  //
+  //    bool can_be_start = false;
+  //    if (!q.use_start_metas_) {
+  //      can_be_start = arrival_station == c.source_;
+  //    } else {
+  //      can_be_start = contains(raptor_sched_.equivalent_stations_[c.source_],
+  //                              arrival_station);
+  //    }
+  //
+  //    if (can_be_start) {
+  //      ij.add_start_station(arrival_station, raptor_sched_, last_departure);
+  //    } else {
+  //      // If we use start meta stations we need to search for the best one.
+  //      // We need to search for the start meta station with the best
+  //      departure
+  //      // time. The best departure time is the latest one.
+  //
+  //      auto const get_start_departure = [&](stop_id const start_station) {
+  //        for (auto const& f :
+  //        timetable_.incoming_footpaths_[arrival_station]) {
+  //          if (f.from_ != start_station) {
+  //            continue;
+  //          }
+  //
+  //          time const first_footpath_duration =
+  //              f.duration_ + raptor_sched_.transfer_times_[start_station];
+  //
+  //          return static_cast<time>(last_departure -
+  //          first_footpath_duration);
+  //        }
+  //
+  //        return invalid<time>;
+  //      };
+  //
+  //      auto const add_start_with_footpath = [&](stop_id const start_station)
+  //      {
+  //        for (auto const& f :
+  //        timetable_.incoming_footpaths_[arrival_station]) {
+  //          if (f.from_ != start_station) {
+  //            continue;
+  //          }
+  //
+  //          ij.add_footpath(arrival_station, last_departure, last_departure,
+  //                          f.duration_, raptor_sched_);
+  //
+  //          auto const first_footpath_duration =
+  //              f.duration_ + raptor_sched_.transfer_times_[start_station];
+  //          ij.add_start_station(start_station, raptor_sched_,
+  //                               last_departure - first_footpath_duration);
+  //        }
+  //      };
+  //
+  //      if (!q.use_start_metas_) {
+  //        add_start_with_footpath(c.source_);
+  //      } else {
+  //        auto const& equivalents =
+  //        raptor_sched_.equivalent_stations_[c.source_]; auto const
+  //        best_station = *std::max_element(
+  //            std::begin(equivalents), std::end(equivalents),
+  //            [&](auto const& s1, auto const& s2) -> bool {
+  //              return get_start_departure(s1) < get_start_departure(s2);
+  //            });
+  //        add_start_with_footpath(best_station);
+  //      }
+  //    }
+  //
+  //    return ij;
+  //  }
+  //
+  //  std::tuple<stop_id, route_id, trip_id, stop_offset> get_previous_station(
+  //      stop_id const arrival_station, time const stop_arrival,
+  //      uint8_t const result_idx, rounds& result) {
+  //    auto const arrival_stop = timetable_.stops_[arrival_station];
+  //
+  //    auto const route_count = arrival_stop.route_count_;
+  //    for (auto sri = arrival_stop.index_to_stop_routes_;
+  //         sri < arrival_stop.index_to_stop_routes_ + route_count; ++sri) {
+  //      auto const r_id = timetable_.stop_routes_[sri];
+  //      auto const& route = timetable_.routes_[r_id];
+  //
+  //      for (stop_offset offset = 1; offset < route.stop_count_; ++offset) {
+  //        auto const rsi = route.index_to_route_stops_ + offset;
+  //        auto const s_id = timetable_.route_stops_[rsi];
+  //        if (s_id != arrival_station) {
+  //          continue;
+  //        }
+  //
+  //        auto const arrival_trip =
+  //            get_arrival_trip_at_station(r_id, stop_arrival, offset);
+  //
+  //        if (!valid(arrival_trip)) {
+  //          continue;
+  //        }
+  //
+  //        auto const board_station = get_board_station_for_trip(
+  //            r_id, arrival_trip, result, result_idx - 1, offset);
+  //
+  //        if (valid(board_station)) {
+  //          return {board_station, r_id, arrival_trip, offset};
+  //        }
+  //      }
+  //    }
+  //
+  //    return {invalid<stop_id>, invalid<route_id>, invalid<trip_id>,
+  //            invalid<stop_offset>};
+  //  }
+  //
+  //  trip_id get_arrival_trip_at_station(route_id const r_id, time const
+  //  arrival,
+  //                                      stop_offset const offset) {
+  //    auto const& route = timetable_.routes_[r_id];
+  //
+  //    for (auto trip = 0; trip < route.trip_count_; ++trip) {
+  //      auto const sti =
+  //          route.index_to_stop_times_ + (trip * route.stop_count_) + offset;
+  //      if (timetable_.stop_times_[sti].arrival_ == arrival) {
+  //        return trip;
+  //      }
+  //    }
+  //
+  //    return invalid<trip_id>;
+  //  }
+  //
+  //  stop_id get_board_station_for_trip(route_id const r_id, trip_id const
+  //  t_id,
+  //                                     rounds& result,
+  //                                     raptor_round const result_idx,
+  //                                     stop_offset const arrival_offset) {
+  //    auto const& r = timetable_.routes_[r_id];
+  //
+  //    auto const first_stop_times_index =
+  //        r.index_to_stop_times_ + (t_id * r.stop_count_);
+  //
+  //    // -1, since we cannot board a trip at the last station
+  //    auto const max_offset =
+  //        std::min(static_cast<stop_offset>(r.stop_count_ - 1),
+  //        arrival_offset);
+  //    for (auto stop_offset = 0; stop_offset < max_offset; ++stop_offset) {
+  //      auto const rsi = r.index_to_route_stops_ + stop_offset;
+  //      auto const stop_id = timetable_.route_stops_[rsi];
+  //
+  //      auto const sti = first_stop_times_index + stop_offset;
+  //      auto const departure = timetable_.stop_times_[sti].departure_;
+  //
+  //      if (valid(departure) &&
+  //      result[result_idx][stop_id].get_earliest_arrival_time() <= departure)
+  //      {
+  //        return stop_id;
+  //      }
+  //    }
+  //
+  //    return invalid<stop_id>;
+  //  }
 
 private:
   schedule const& sched_;

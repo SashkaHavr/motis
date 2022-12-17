@@ -56,7 +56,8 @@ struct label {
                                                                             parent_departure_time_(parent_label.arrival_time_) { }
 
   bool dominates(label& other) {
-    return arrival_time_rule(other);
+    return arrival_time_ <= other.arrival_time_; //&& departure_time_ >= other.departure_time_ && changes_count_ <= other.changes_count_; /*&&
+           //(arrival_time_ < other.arrival_time_ || departure_time_ > other.departure_time_ || changes_count_ < other.changes_count_)*/;
   }
 
 

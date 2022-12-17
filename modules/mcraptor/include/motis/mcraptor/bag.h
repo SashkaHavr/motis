@@ -25,7 +25,9 @@ struct bag {
     for (size_t i = 0; i < labels_.size(); i++) {
       if (labels_[i].dominates(other_label)) return false;
       if (other_label.dominates(labels_[i])) {
+        //std::swap(labels_[labels_.size() - removed_labels - 1], labels_[i]);
         removed_labels++;
+        //i--;
         continue;
       }
       labels_[i - removed_labels] = labels_[i];
@@ -43,7 +45,9 @@ struct bag {
     size_t removed_labels = 0;
     for (size_t i = 0; i < labels_.size(); i++) {
       if (other_label.dominates(labels_[i])) {
+        //std::swap(labels_[labels_.size() - removed_labels - 1], labels_[i]);
         removed_labels++;
+        //i--;
         continue;
       }
       labels_[i - removed_labels] = labels_[i];
@@ -111,7 +115,9 @@ struct route_bag {
         return;
       }
       if (other_label.dominates(labels_[i])) {
+        //std::swap(labels_[labels_.size() - removed_labels - 1], labels_[i]);
         removed_labels++;
+        //i--;
         continue;
       }
       labels_[i - removed_labels] = labels_[i];

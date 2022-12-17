@@ -47,7 +47,7 @@ inline std::vector<journey> raptor_gen(raptor_query<L>& q, raptor_statistics& st
       q.source_time_begin_, q.source_time_end_, dep_events[q.source_]);
 
   stats.raptor_queries_ += 1;
-  /*q.source_time_begin_ = q.source_time_end_ + 1;*/
+  q.source_time_begin_ = q.source_time_end_ + 1;
   MOTIS_START_TIMING(plus_one_time);
   raptor.set_query_source_time(q.source_time_end_ + 1);
   raptor.invoke_cpu_raptor();
