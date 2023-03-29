@@ -150,13 +150,15 @@ mcraptor::~mcraptor() = default;
 void mcraptor::init(motis::module::registry& reg) {
   impl_ = std::make_unique<impl>(get_sched(), config_);
 
-  reg.register_op("/mcraptor_cpu", [&](auto&& m) { return impl_->route_cpu(m); });
+  reg.register_op("/mcraptor_cpu", [&](auto&& m) { return impl_->route_cpu(m); },
+                  {kScheduleReadAccess});
 
 #if defined(MOTIS_CUDA)
   reg.register_op("/raptor", [&](auto&& m) { return impl_->route_gpu(m); });
   reg.register_op("/raptor_gpu", [&](auto&& m) { return impl_->route_gpu(m); });
 #else
-  reg.register_op("/mcraptor", [&](auto&& m) { return impl_->route_cpu(m); });
+  reg.register_op("/mcraptor", [&](auto&& m) { return impl_->route_cpu(m); },
+                  {kScheduleReadAccess});
 #endif
 }
 
