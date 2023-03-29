@@ -7,6 +7,7 @@ import {
   MeasureRecipients,
   MeasureType,
   MeasureWrapper,
+  OverrideCapacitySection,
 } from "@/api/protocol/motis/paxforecast";
 import {
   RiBasisFahrt,
@@ -54,6 +55,11 @@ export interface RtCancelMeasureData {
   allow_reroute: boolean;
 }
 
+export interface UpdateCapacityMeasureData {
+  trip: TripServiceInfo | undefined;
+  seats: number;
+}
+
 export type UiMeasureType = MeasureType | "Empty" | "RtCancelMeasure";
 
 export type EmptyMeasureU = { type: "Empty"; shared: SharedMeasureData };
@@ -88,13 +94,20 @@ export type RtCancelMeasureU = {
   data: RtCancelMeasureData;
 };
 
+export type UpdateCapacitiesMeasureU = {
+  type: "UpdateCapacitiesMeasure";
+  shared: SharedMeasureData;
+  data: UpdateCapacityMeasureData;
+};
+
 export type MeasureUnion =
   | EmptyMeasureU
   | TripLoadInfoMeasureU
   | TripRecommendationMeasureU
   | TripLoadRecommendationMeasureU
   | RtUpdateMeasureU
-  | RtCancelMeasureU;
+  | RtCancelMeasureU
+  | UpdateCapacitiesMeasureU;
 
 export function isEmptyMeasureU(mu: MeasureUnion): mu is EmptyMeasureU {
   return mu.type === "Empty";
@@ -124,6 +137,30 @@ export function isRtUpdateMeasureU(mu: MeasureUnion): mu is RtUpdateMeasureU {
 
 export function isRtCancelMeasureU(mu: MeasureUnion): mu is RtCancelMeasureU {
   return mu.type === "RtCancelMeasure";
+}
+
+export function measureSupportsRecipients(mu: MeasureUnion): boolean {
+  return mu.type !== "UpdateCapacitiesMeasure";
+}
+
+export function measureNeedsRecipients(mu: MeasureUnion): boolean {
+  return measureTypeNeedsRecipients(mu.type);
+}
+
+export function measureTypeNeedsRecipients(
+  type: MeasureUnion["type"]
+): boolean {
+  return (
+    type !== "RtUpdateMeasure" &&
+    type !== "RtCancelMeasure" &&
+    type !== "UpdateCapacitiesMeasure"
+  );
+}
+
+export function isUpdateCapacitiesMeasureU(
+  mu: MeasureUnion
+): mu is UpdateCapacitiesMeasureU {
+  return mu.type === "UpdateCapacitiesMeasure";
 }
 
 export function toMeasureWrapper(mu: MeasureUnion): MeasureWrapper | null {
@@ -208,6 +245,28 @@ export function toMeasureWrapper(mu: MeasureUnion): MeasureWrapper | null {
       const updated = cancelStops(d.original_ribasis, d.canceled_stops);
       const ribf = makeRiBasisFahrt(updated, mu.shared.time);
       return makeRtUpdateMeasure(shared, ribf);
+    }
+    case "UpdateCapacitiesMeasure": {
+      const d = mu.data;
+      if (!d.trip) {
+        return null;
+      }
+      const sections: OverrideCapacitySection[] = [];
+      if (d.seats !== 0) {
+        sections.push({
+          departure_station: "",
+          departure_schedule_time: 0,
+          seats: d.seats,
+        });
+      }
+      return {
+        measure_type: "OverrideCapacityMeasure",
+        measure: {
+          time: shared.time,
+          trip: d.trip.trip,
+          sections,
+        },
+      };
     }
   }
 }

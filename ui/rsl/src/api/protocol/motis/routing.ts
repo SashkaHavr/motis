@@ -1,8 +1,10 @@
-// generated file - do not modify - run update-protocol to update
+// GENERATED FILE - DO NOT MODIFY
+// -> see /tools/protocol for information on how to update this file
 import {
   Connection,
   DirectConnection,
   Interval,
+  SearchDir,
   Statistics,
   TripId,
 } from "@/api/protocol/motis";
@@ -107,9 +109,6 @@ export type SearchType =
   | "Accessibility"
   | "DefaultPrice"
   | "DefaultPriceRegional";
-
-// routing/RoutingRequest.fbs
-export type SearchDir = "Forward" | "Backward";
 
 // routing/RoutingRequest.fbs
 export interface RoutingRequest {

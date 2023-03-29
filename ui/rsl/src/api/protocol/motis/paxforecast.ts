@@ -1,14 +1,37 @@
-// generated file - do not modify - run update-protocol to update
+// GENERATED FILE - DO NOT MODIFY
+// -> see /tools/protocol for information on how to update this file
 import { TripId } from "@/api/protocol/motis";
 import {
   PaxMonCompactJourney,
-  PaxMonGroup,
+  PaxMonGroupWithRoute,
   PaxMonLocalization,
   PaxMonLocalizationType,
   PaxMonTrackedUpdates,
   PaxMonTripLoadInfo,
 } from "@/api/protocol/motis/paxmon";
 import { RISContentType } from "@/api/protocol/motis/ris";
+
+// paxforecast/PaxForecastUpdate.fbs
+export interface PaxForecastAlternative {
+  journey: PaxMonCompactJourney;
+  probability: number;
+}
+
+// paxforecast/PaxForecastUpdate.fbs
+export interface PaxForecastGroupRoute {
+  group_route: PaxMonGroupWithRoute;
+  localization_type: PaxMonLocalizationType;
+  localization: PaxMonLocalization;
+  forecast_alternatives: PaxForecastAlternative[];
+}
+
+// paxforecast/PaxForecastUpdate.fbs
+export interface PaxForecastUpdate {
+  universe: number;
+  system_time: number;
+  groups: PaxForecastGroupRoute[];
+  trips: PaxMonTripLoadInfo[];
+}
 
 // paxforecast/Measures.fbs
 export interface MeasureRecipients {
@@ -60,17 +83,46 @@ export interface RtUpdateMeasure {
 }
 
 // paxforecast/Measures.fbs
+export interface UpdateCapacitiesMeasure {
+  time: number;
+  file_contents: string[];
+  remove_existing_trip_capacities: boolean;
+  remove_existing_category_capacities: boolean;
+  remove_existing_vehicle_capacities: boolean;
+  remove_existing_trip_formations: boolean;
+  track_trip_updates: boolean;
+}
+
+// paxforecast/Measures.fbs
+export interface OverrideCapacitySection {
+  departure_station: string;
+  departure_schedule_time: number;
+  seats: number;
+}
+
+// paxforecast/Measures.fbs
+export interface OverrideCapacityMeasure {
+  time: number;
+  trip: TripId;
+  sections: OverrideCapacitySection[];
+}
+
+// paxforecast/Measures.fbs
 export type Measure =
   | TripLoadInfoMeasure
   | TripRecommendationMeasure
   | TripLoadRecommendationMeasure
-  | RtUpdateMeasure;
+  | RtUpdateMeasure
+  | UpdateCapacitiesMeasure
+  | OverrideCapacityMeasure;
 
 export type MeasureType =
   | "TripLoadInfoMeasure"
   | "TripRecommendationMeasure"
   | "TripLoadRecommendationMeasure"
-  | "RtUpdateMeasure";
+  | "RtUpdateMeasure"
+  | "UpdateCapacitiesMeasure"
+  | "OverrideCapacityMeasure";
 
 // paxforecast/Measures.fbs
 export interface MeasureWrapper {
@@ -96,10 +148,8 @@ export interface PaxForecastApplyMeasuresStatistics {
   total_affected_groups: number;
   total_alternative_routings: number;
   total_alternatives_found: number;
-  groups_broken: number;
-  pax_broken: number;
-  groups_with_major_delay: number;
-  pax_with_major_delay: number;
+  group_routes_broken: number;
+  group_routes_with_major_delay: number;
   t_rt_updates: number;
   t_get_affected_groups: number;
   t_find_alternatives: number;
@@ -107,32 +157,11 @@ export interface PaxForecastApplyMeasuresStatistics {
   t_behavior_simulation: number;
   t_update_groups: number;
   t_update_tracker: number;
+  t_update_capacities: number;
 }
 
 // paxforecast/PaxForecastApplyMeasuresResponse.fbs
 export interface PaxForecastApplyMeasuresResponse {
   stats: PaxForecastApplyMeasuresStatistics;
   updates: PaxMonTrackedUpdates;
-}
-
-// paxforecast/PaxForecastUpdate.fbs
-export interface PaxForecastAlternative {
-  journey: PaxMonCompactJourney;
-  probability: number;
-}
-
-// paxforecast/PaxForecastUpdate.fbs
-export interface PaxForecastGroup {
-  group: PaxMonGroup;
-  localization_type: PaxMonLocalizationType;
-  localization: PaxMonLocalization;
-  forecast_alternatives: PaxForecastAlternative[];
-}
-
-// paxforecast/PaxForecastUpdate.fbs
-export interface PaxForecastUpdate {
-  universe: number;
-  system_time: number;
-  groups: PaxForecastGroup[];
-  trips: PaxMonTripLoadInfo[];
 }

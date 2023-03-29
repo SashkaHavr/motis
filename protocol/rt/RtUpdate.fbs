@@ -2,6 +2,7 @@ include "base/TripId.fbs";
 include "base/TimestampReason.fbs";
 include "base/EventType.fbs";
 include "base/Connection.fbs";
+include "ris/TripFormationMessage.fbs";
 
 namespace motis.rt;
 
@@ -20,6 +21,7 @@ table UpdatedRtEventInfo {
 table RtDelayUpdate {
   trip: motis.TripId;
   events: [UpdatedRtEventInfo];
+  trip_separated: bool;
 }
 
 table RtRerouteUpdate {
@@ -45,12 +47,32 @@ table RtStationAdded {
   name: string;
 }
 
+enum RtExpandedTripUpdateType : byte {
+  TripUpdated,
+  TripAdded,
+  TripRemoved
+}
+
+struct RtExpandedTripIndex {
+  route_index: uint; // expanded route
+  index_in_route: uint;
+}
+
+table RtExpandedTripUpdate {
+  trip_index: uint;
+  update_type: RtExpandedTripUpdateType;
+  old_expanded_route: RtExpandedTripIndex; // valid only if updated or removed
+  new_expanded_route: RtExpandedTripIndex; // valid only if updated or added
+}
+
 union Content {
   RtDelayUpdate,
   RtRerouteUpdate,
   RtTrackUpdate,
   RtFreeTextUpdate,
-  RtStationAdded
+  RtStationAdded,
+  RtExpandedTripUpdate,
+  motis.ris.TripFormationMessage
 }
 
 table RtUpdate {

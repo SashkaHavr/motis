@@ -17,8 +17,9 @@ using motis::test::schedule::simple_realtime::dataset_opt;
 struct routing_itest : public motis_instance_test {
   routing_itest()
       : motis::test::motis_instance_test(
-            dataset_opt, {"routing", "csa", "raptor", "tripbased"},
-            {"--tripbased.use_data_file=false"}) {}
+            dataset_opt, {"routing", "csa", "raptor", "tripbased", "nigiri"},
+            {"--tripbased.use_data_file=false",
+             "--nigiri.first_day=2015-11-24"}) {}
 
   msg_ptr make_routing_request(std::string const& target) {
     message_creator fbb;
@@ -47,9 +48,22 @@ TEST_F(routing_itest, all_routings_deliver_equal_journey) {
   auto const reference = message_to_journeys(
       motis_content(RoutingResponse, call(make_routing_request("/routing"))));
   EXPECT_EQ(reference.size(), 1U);
-  for (auto const& target : {"/routing", "/tripbased", "/raptor_cpu", "/csa"}) {
-    auto const testee = message_to_journeys(
-        motis_content(RoutingResponse, call(make_routing_request(target))));
+  for (auto const& target :
+       {"/routing", "/tripbased", "/raptor_cpu", "/csa", "/nigiri"}) {
+    std::vector<journey> testee;
+    EXPECT_NO_THROW(testee = message_to_journeys(motis_content(
+                        RoutingResponse, call(make_routing_request(target)))));
+    if (reference != testee) {
+      std::cerr << "REF\n";
+      for (auto const& x : reference) {
+        print_journey(x, std::cerr);
+      }
+
+      std::cerr << "TESTEE\n";
+      for (auto const& x : testee) {
+        print_journey(x, std::cerr);
+      }
+    }
     EXPECT_EQ(reference, testee);
   }
 }

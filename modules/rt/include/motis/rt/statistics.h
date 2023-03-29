@@ -24,6 +24,15 @@ struct statistics {
     c("reroute", s.reroute_msgs_);
     c("track", s.track_change_msgs_);
     c("free text", s.free_text_msgs_);
+    c("trip formation", s.trip_formation_msgs_);
+
+    o << "\nseparate trip:\n";
+    c("edge fit", s.edge_fit_);
+    c("trip fit", s.trip_fit_);
+    c("edge fit | trip fit", s.edge_fit_or_trip_fit_);
+    c("edge fit & trip fit", s.edge_fit_and_trip_fit_);
+    c("edge fit 1", s.edge_fit_1_);
+    c("total", s.total_);
 
     o << "\nevs:\n";
     c("total", s.total_evs_);
@@ -185,6 +194,13 @@ struct statistics {
             canceled_trp_not_found_) != 0;
   }
 
+  unsigned edge_fit_ = 0;
+  unsigned trip_fit_ = 0;
+  unsigned edge_fit_and_trip_fit_ = 0;
+  unsigned edge_fit_or_trip_fit_ = 0;
+  unsigned edge_fit_1_ = 0;
+  unsigned total_ = 0;
+
   unsigned delay_msgs_ = 0;
   unsigned cancel_msgs_ = 0;
   unsigned additional_msgs_ = 0;
@@ -193,6 +209,7 @@ struct statistics {
   unsigned con_assessment_msgs_ = 0;
   unsigned track_change_msgs_ = 0;
   unsigned free_text_msgs_ = 0;
+  unsigned trip_formation_msgs_ = 0;
 
   unsigned total_evs_ = 0;
   unsigned ev_invalid_time_ = 0;

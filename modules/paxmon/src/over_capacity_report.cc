@@ -41,7 +41,9 @@ std::set<std::uint32_t> get_train_nrs(trip const* trp) {
 
 std::string_view capacity_source_str(capacity_source const src) {
   switch (src) {
-    case capacity_source::TRIP_EXACT: return "trip";
+    case capacity_source::TRIP_EXACT: return "trip_exact";
+    case capacity_source::TRIP_PRIMARY: return "trip_primary_id";
+    case capacity_source::TRAIN_NR_AND_STATIONS: return "train_nr_and_stations";
     case capacity_source::TRAIN_NR: return "train_nr";
     case capacity_source::CATEGORY: return "category";
     case capacity_source::CLASZ: return "clasz";
@@ -61,7 +63,7 @@ void write_over_capacity_report(universe const& uv, schedule const& sched,
         continue;
       }
       auto const passengers = get_base_load(
-          uv.passenger_groups_, uv.pax_connection_info_.groups_[e.pci_]);
+          uv.passenger_groups_, uv.pax_connection_info_.group_routes(e.pci_));
       auto const capacity = e.capacity();
       if (e.has_capacity() && passengers > capacity) {
         for (auto const& trp : e.get_trips(sched)) {
@@ -100,7 +102,7 @@ void write_over_capacity_report(universe const& uv, schedule const& sched,
       auto const& from_station = e->from(uv)->get_station(sched);
       auto const& to_station = e->to(uv)->get_station(sched);
       auto const passengers = get_base_load(
-          uv.passenger_groups_, uv.pax_connection_info_.groups_[e->pci_]);
+          uv.passenger_groups_, uv.pax_connection_info_.group_routes(e->pci_));
       auto const capacity = e->capacity();
       auto const additional = static_cast<int>(passengers - capacity);
       auto const percentage = static_cast<double>(passengers) /

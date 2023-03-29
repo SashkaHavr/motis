@@ -57,7 +57,9 @@ RailViz.Path.Base = (function () {
   function setEnabled(b) {
     if (map !== null) {
       ["railviz-base-line", "railviz-base-stations"].forEach((l) => {
-        map.setLayoutProperty(l, "visibility", b ? "visible" : "none");
+        if (map.getLayer(l) !== 'undefined') {
+          map.setLayoutProperty(l, "visibility", b ? "visible" : "none");
+        }
       });
     }
     enabled = b;

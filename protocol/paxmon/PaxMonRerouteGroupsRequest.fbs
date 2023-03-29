@@ -1,0 +1,22 @@
+include "paxmon/PaxMonGroup.fbs";
+include "paxmon/PaxMonRerouteReason.fbs";
+include "paxmon/PaxMonBrokenTransferInfo.fbs";
+include "paxmon/PaxMonLocalization.fbs";
+
+namespace motis.paxmon;
+
+table PaxMonRerouteGroup {
+  group: uint;
+  old_route_index: uint;
+  new_routes: [PaxMonGroupRoute];
+  reason: PaxMonRerouteReason;
+  broken_transfer: [PaxMonBrokenTransferInfo]; // optional (0 or 1)
+  override_probabilities: bool;
+  localization: [PaxMonLocalizationWrapper]; // optional (0 or 1)
+}
+
+table PaxMonRerouteGroupsRequest {
+  universe: uint;
+
+  reroutes: [PaxMonRerouteGroup];
+}

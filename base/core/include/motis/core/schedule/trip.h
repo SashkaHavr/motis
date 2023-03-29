@@ -4,6 +4,8 @@
 #include <optional>
 #include <utility>
 
+#include "boost/uuid/uuid.hpp"
+
 #include "cista/hashing.h"
 #include "cista/offset_t.h"
 #include "cista/reflection/comparable.h"
@@ -45,6 +47,10 @@ struct primary_trip_id {
   motis::time get_time() const { return static_cast<motis::time>(time_); }
   uint32_t get_train_nr() const { return static_cast<uint32_t>(train_nr_); }
 
+  cista::hash_t hash() const {
+    return cista::build_hash(station_id_, time_, train_nr_);
+  }
+
   uint64_t station_id_ : 31;
   uint64_t time_ : 16;
   uint64_t train_nr_ : 17;
@@ -58,6 +64,11 @@ struct secondary_trip_id {
 };
 
 struct trip_debug {
+  trip_debug() = default;
+
+  trip_debug(mcd::string* file, int line_from, int line_to)
+      : file_{file}, line_from_{line_from}, line_to_{line_to} {}
+
   friend std::ostream& operator<<(std::ostream& out, trip_debug const& dbg) {
     return out << dbg.str();
   }
@@ -69,7 +80,7 @@ struct trip_debug {
                                   std::to_string(line_to_);
   }
 
-  mcd::string* file_{nullptr};
+  ptr<mcd::string> file_{nullptr};
   int line_from_{0}, line_to_{0};
 };
 
@@ -119,13 +130,7 @@ struct trip {
     route_edge(edge const* e) {  // NOLINT
       if (e != nullptr) {
         route_node_ = e->from_;
-        for (auto i = 0U; i < route_node_->edges_.size(); ++i) {
-          if (&route_node_->edges_[i] == e) {
-            outgoing_edge_idx_ = i;
-            return;
-          }
-        }
-        assert(false);
+        outgoing_edge_idx_ = route_node_->edges_.index_of(e);
       }
     }
 
@@ -164,11 +169,14 @@ struct trip {
   };
 
   full_trip_id id_;
+  mcd::string gtfs_trip_id_;
   ptr<mcd::vector<route_edge> const> edges_{nullptr};
   lcon_idx_t lcon_idx_{0U};
   trip_idx_t trip_idx_{0U};  // position in schedule.trip_mem_
   trip_debug dbg_;
   mcd::vector<uint32_t> stop_seq_numbers_;
+  boost::uuids::uuid uuid_{};
+  bool unscheduled_{false};
 };
 
 }  // namespace motis

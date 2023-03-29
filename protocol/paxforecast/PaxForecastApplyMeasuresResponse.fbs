@@ -9,10 +9,8 @@ table PaxForecastApplyMeasuresStatistics {
   total_alternative_routings: ulong;
   total_alternatives_found: ulong;
 
-  groups_broken: ulong;
-  pax_broken: ulong;
-  groups_with_major_delay: ulong;
-  pax_with_major_delay: ulong;
+  group_routes_broken: ulong;
+  group_routes_with_major_delay: ulong;
 
   // timings (ms)
   t_rt_updates: double;
@@ -22,6 +20,7 @@ table PaxForecastApplyMeasuresStatistics {
   t_behavior_simulation: double;
   t_update_groups: double;
   t_update_tracker: double;
+  t_update_capacities: double;
 }
 
 table PaxForecastApplyMeasuresResponse {

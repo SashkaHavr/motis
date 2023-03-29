@@ -2,6 +2,8 @@
 
 #include "utl/to_vec.h"
 
+#include "motis/vector.h"
+
 #include "motis/core/access/station_access.h"
 #include "motis/core/access/time_access.h"
 #include "motis/core/conv/trip_conv.h"
@@ -16,15 +18,16 @@ using namespace motis::paxmon;
 
 namespace motis::paxforecast {
 
-Offset<PaxForecastGroup> get_passenger_group_forecast(
-    FlatBufferBuilder& fbb, schedule const& sched, passenger_group const& grp,
+Offset<PaxForecastGroupRoute> get_passenger_group_route_forecast(
+    FlatBufferBuilder& fbb, schedule const& sched, universe const& uv,
+    passenger_group_with_route const& pgwr,
     group_simulation_result const& group_result) {
-  return CreatePaxForecastGroup(
-      fbb, to_fbs(sched, fbb, grp),
+  return CreatePaxForecastGroupRoute(
+      fbb, to_fbs(sched, uv.passenger_groups_, fbb, pgwr),
       fbs_localization_type(*group_result.localization_),
       to_fbs(sched, fbb, *group_result.localization_),
-      fbb.CreateVector(
-          utl::to_vec(group_result.alternatives_, [&](auto const& alt) {
+      fbb.CreateVector(utl::to_vec(
+          group_result.alternative_probabilities_, [&](auto const& alt) {
             return CreatePaxForecastAlternative(
                 fbb, to_fbs(sched, fbb, alt.first->compact_journey_),
                 alt.second);
@@ -48,10 +51,11 @@ msg_ptr make_forecast_update_msg(schedule const& sched, universe const& uv,
       MsgContent_PaxForecastUpdate,
       CreatePaxForecastUpdate(fbb, uv.id_, sched.system_time_,
                               fbb.CreateVector(utl::to_vec(
-                                  sim_result.group_results_,
+                                  sim_result.group_route_results_,
                                   [&](auto const& entry) {
-                                    return get_passenger_group_forecast(
-                                        fbb, sched, *entry.first, entry.second);
+                                    return get_passenger_group_route_forecast(
+                                        fbb, sched, uv, entry.first,
+                                        entry.second);
                                   })),
                               to_fbs(fbb, sched, uv, lfc))
           .Union(),
@@ -118,6 +122,36 @@ measures::rt_update from_fbs(schedule const& sched, RtUpdateMeasure const* m) {
           m->content()->str()};
 }
 
+measures::update_capacities from_fbs(schedule const& sched,
+                                     UpdateCapacitiesMeasure const* m) {
+  return {
+      unix_to_motistime(sched.schedule_begin_, m->time()),
+      utl::to_vec(*m->file_contents(), [](auto const& s) { return s->str(); }),
+      m->remove_existing_trip_capacities(),
+      m->remove_existing_category_capacities(),
+      m->remove_existing_vehicle_capacities(),
+      m->remove_existing_trip_formations(),
+      m->track_trip_updates()};
+}
+
+measures::override_capacity from_fbs(schedule const& sched,
+                                     OverrideCapacityMeasure const* m) {
+  return {unix_to_motistime(sched.schedule_begin_, m->time()),
+          from_fbs(sched, m->trip())->id_,
+          mcd::to_vec(*m->sections(), [&](OverrideCapacitySection const* sec) {
+            auto const dep_time = sec->departure_schedule_time();
+            return paxmon::capacity_override_section{
+                sec->departure_station()->size() == 0
+                    ? 0U
+                    : get_station_index(sched, sec->departure_station()),
+                dep_time == 0
+                    ? static_cast<time>(0)
+                    : unix_to_motistime(sched.schedule_begin_,
+                                        sec->departure_schedule_time()),
+                {.seats_ = static_cast<std::uint16_t>(sec->seats())}};
+          })};
+}
+
 measures::measure_collection from_fbs(
     schedule const& sched, Vector<Offset<MeasureWrapper>> const* ms) {
   measures::measure_collection res;
@@ -146,6 +180,20 @@ measures::measure_collection from_fbs(
       case Measure_RtUpdateMeasure: {
         auto const m = from_fbs(
             sched, reinterpret_cast<RtUpdateMeasure const*>(fm->measure()));
+        res[m.time_].emplace_back(m);
+        break;
+      }
+      case Measure_UpdateCapacitiesMeasure: {
+        auto const m = from_fbs(
+            sched,
+            reinterpret_cast<UpdateCapacitiesMeasure const*>(fm->measure()));
+        res[m.time_].emplace_back(m);
+        break;
+      }
+      case Measure_OverrideCapacityMeasure: {
+        auto const m = from_fbs(
+            sched,
+            reinterpret_cast<OverrideCapacityMeasure const*>(fm->measure()));
         res[m.time_].emplace_back(m);
         break;
       }

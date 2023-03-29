@@ -9,10 +9,10 @@
 #include "utl/erase_if.h"
 #include "utl/get_or_create.h"
 #include "utl/pairwise.h"
+#include "utl/parallel_for.h"
 #include "utl/parser/cstr.h"
 #include "utl/pipes/accumulate.h"
 #include "utl/pipes/all.h"
-#include "utl/pipes/for_each.h"
 #include "utl/pipes/remove_if.h"
 #include "utl/pipes/transform.h"
 #include "utl/pipes/vec.h"
@@ -111,74 +111,6 @@ std::time_t to_unix_time(boost::gregorian::date const& date) {
   return (boost::posix_time::ptime(date) - epoch).total_seconds();
 }
 
-void fix_stop_positions(trip_map& trips) {
-  auto const is_logical = [](stop_time const& a, stop_time const& b) {
-    constexpr auto const SLACK_BUFFER = 5;
-    auto const dist_in_m = geo::distance(a.stop_->coord_, b.stop_->coord_);
-    if (dist_in_m <= 1.0) {
-      return true;
-    }
-    auto const time_diff_in_min = b.arr_.time_ - a.dep_.time_ + SLACK_BUFFER;
-    auto const speed_in_kmh = (dist_in_m / 1000.0) / (time_diff_in_min / 60.0);
-    return speed_in_kmh < 350;
-  };
-
-  auto const is_strange = [](stop_time const& s) {
-    return std::abs(s.stop_->coord_.lat_) < 5 &&
-           std::abs(s.stop_->coord_.lng_) < 5;
-  };
-
-  for (auto const& [id, t] : trips) {
-    auto const stops = t->stop_times_.to_vector();
-    for (auto const [a, b, c] : utl::nwise<3>(stops)) {
-      auto const logical_a_b = is_logical(a, b);
-      auto const logical_b_c = is_logical(b, c);
-      auto const logical_a_c = is_logical(a, c);
-
-      stop* corrected = nullptr;
-      geo::latlng before;
-      auto const correct = [&](stop_time const& s,
-                               geo::latlng const& new_coord) {
-        corrected = s.stop_;
-        before = s.stop_->coord_;
-        s.stop_->coord_ = new_coord;
-      };
-
-      if (!logical_a_b && !logical_b_c && logical_a_c && !is_strange(a) &&
-          !is_strange(c)) {
-        correct(b, geo::latlng{
-                       a.stop_->coord_.lat_ +
-                           0.5 * (c.stop_->coord_.lat_ - a.stop_->coord_.lat_),
-                       a.stop_->coord_.lng_ + 0.5 * (c.stop_->coord_.lng_ -
-                                                     a.stop_->coord_.lng_)});
-      } else if (!logical_a_b && logical_b_c && !is_strange(b)) {
-        correct(a, b.stop_->coord_);
-      } else if (logical_a_b && !logical_b_c && !is_strange(b)) {
-        correct(c, b.stop_->coord_);
-      } else if (is_strange(a) && (!is_strange(b) || !is_strange(c))) {
-        correct(a, !is_strange(b) ? c.stop_->coord_ : b.stop_->coord_);
-      } else if (is_strange(b) && (!is_strange(a) || !is_strange(c))) {
-        correct(b, !is_strange(a) ? a.stop_->coord_ : c.stop_->coord_);
-      } else if (is_strange(c) && (!is_strange(a) || !is_strange(b))) {
-        correct(c, !is_strange(a) ? a.stop_->coord_ : b.stop_->coord_);
-      }
-
-      if (corrected != nullptr) {
-        LOG(warn) << "adjusting stop position from (" << before.lat_ << ", "
-                  << before.lng_ << ") to (" << corrected->coord_.lat_ << ", "
-                  << corrected->coord_.lng_
-                  << "): sanity check failed for trip \"" << id
-                  << "\", stop_id=" << corrected->id_ << " (a=" << a.stop_->id_
-                  << ", b=" << b.stop_->id_ << ", c=" << c.stop_->id_
-                  << "): " << a.stop_->coord_.lat_ << ","
-                  << a.stop_->coord_.lng_ << " -> " << b.stop_->coord_.lat_
-                  << "," << b.stop_->coord_.lng_ << " -> "
-                  << c.stop_->coord_.lat_ << "," << c.stop_->coord_.lng_;
-      }
-    }
-  }
-}
-
 void fix_flixtrain_transfers(trip_map& trips,
                              std::map<stop_pair, transfer>& transfers) {
   for (auto const& id_prefix : {"FLIXBUS:FLX", "FLIXBUS:K"}) {
@@ -254,9 +186,12 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
   auto const traffic_days = merge_traffic_days(calendar, dates);
   auto transfers = read_transfers(load(TRANSFERS_FILE), stops);
   auto [trips, blocks] = read_trips(load(TRIPS_FILE), routes, traffic_days);
+  read_frequencies(load(FREQUENCIES_FILE), trips);
   read_stop_times(load(STOP_TIMES_FILE), trips, stops);
-  fix_stop_positions(trips);
   fix_flixtrain_transfers(trips, transfers);
+  for (auto& [_, trip] : trips) {
+    trip->interpolate();
+  }
 
   std::map<category, fbs64::Offset<Category>> fbs_categories;
   std::map<agency const*, fbs64::Offset<Provider>> fbs_providers;
@@ -356,72 +291,77 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
   auto const interval = Interval{to_unix_time(traffic_days.first_day_),
                                  to_unix_time(traffic_days.last_day_)};
 
-  auto const create_service = [&](trip const* t, bitfield const& traffic_days,
-                                  bool const is_rule_service_participant) {
-    auto const is_train_number = [](auto const& s) {
-      return !s.empty() && std::all_of(begin(s), end(s), [](auto&& c) -> bool {
-        return std::isdigit(c);
-      });
-    };
+  auto const create_service =
+      [&](trip const* t, bitfield const& traffic_days,
+          bool const is_rule_service_participant,
+          ScheduleRelationship const schedule_relationship) {
+        auto const is_train_number = [](auto const& s) {
+          return !s.empty() &&
+                 std::all_of(begin(s), end(s),
+                             [](auto&& c) -> bool { return std::isdigit(c); });
+        };
 
-    int train_nr = 0;
-    if (is_train_number(t->short_name_)) {
-      train_nr = std::stoi(t->short_name_);
-    } else if (is_train_number(t->headsign_)) {
-      train_nr = std::stoi(t->headsign_);
-    }
+        int train_nr = 0;
+        if (is_train_number(t->short_name_)) {
+          train_nr = std::stoi(t->short_name_);
+        } else if (is_train_number(t->headsign_)) {
+          train_nr = std::stoi(t->headsign_);
+        }
 
-    auto const stop_seq = t->stops();
-    return CreateService(
-        fbb,
-        utl::get_or_create(
-            fbs_routes, stop_seq,
-            [&]() {
-              return CreateRoute(
-                  fbb,  //
-                  fbb.CreateVector(
-                      utl::to_vec(stop_seq,
-                                  [&](trip::stop_identity const& s) {
-                                    return get_or_create_stop(s.stop_);
-                                  })),
-                  fbb.CreateVector(utl::to_vec(
-                      stop_seq,
-                      [](trip::stop_identity const& s) {
-                        return static_cast<uint8_t>(s.in_allowed_ ? 1U : 0U);
-                      })),
-                  fbb.CreateVector(
-                      utl::to_vec(stop_seq, [](trip::stop_identity const& s) {
-                        return static_cast<uint8_t>(s.out_allowed_ ? 1U : 0U);
-                      })));
-            }),
-        fbb.CreateString(serialize_bitset(traffic_days)),
-        fbb.CreateVector(repeat_n(
-            CreateSection(
-                fbb, get_or_create_category(t),
-                get_or_create_provider(t->route_->agency_), train_nr,
-                get_or_create_str(t->route_->short_name_),
-                fbb.CreateVector(std::vector<fbs64::Offset<Attribute>>()),
-                CreateDirection(fbb, 0, get_or_create_direction(t))),
-            stop_seq.size() - 1)),
-        0 /* tracks currently not extracted */,
-        fbb.CreateVector(utl::all(t->stop_times_)  //
-                         | utl::accumulate(
-                               [&](std::vector<int>&& times,
-                                   flat_map<stop_time>::entry_t const& st) {
-                                 times.emplace_back(st.second.arr_.time_);
-                                 times.emplace_back(st.second.dep_.time_);
-                                 return std::move(times);
-                               },
-                               std::vector<int>())),
-        0 /* route key obsolete */,
-        CreateServiceDebugInfo(fbb, get_or_create_str(t->id_), t->line_,
-                               t->line_),
-        is_rule_service_participant, 0 /* initial train number */,
-        get_or_create_str(t->id_),
-        utl::get_or_create(fbs_seq_numbers, t->seq_numbers(), [&]() {
-          return fbb.CreateVector(t->seq_numbers());
-        }));
-  };
+        auto const stop_seq = t->stops();
+        return CreateService(
+            fbb,
+            utl::get_or_create(
+                fbs_routes, stop_seq,
+                [&]() {
+                  return CreateRoute(
+                      fbb,  //
+                      fbb.CreateVector(
+                          utl::to_vec(stop_seq,
+                                      [&](trip::stop_identity const& s) {
+                                        return get_or_create_stop(s.stop_);
+                                      })),
+                      fbb.CreateVector(utl::to_vec(
+                          stop_seq,
+                          [](trip::stop_identity const& s) {
+                            return static_cast<uint8_t>(s.in_allowed_ ? 1U
+                                                                      : 0U);
+                          })),
+                      fbb.CreateVector(utl::to_vec(
+                          stop_seq, [](trip::stop_identity const& s) {
+                            return static_cast<uint8_t>(s.out_allowed_ ? 1U
+                                                                       : 0U);
+                          })));
+                }),
+            fbb.CreateString(serialize_bitset(traffic_days)),
+            fbb.CreateVector(repeat_n(
+                CreateSection(
+                    fbb, get_or_create_category(t),
+                    get_or_create_provider(t->route_->agency_), train_nr,
+                    get_or_create_str(t->route_->short_name_),
+                    fbb.CreateVector(std::vector<fbs64::Offset<Attribute>>()),
+                    CreateDirection(fbb, 0, get_or_create_direction(t))),
+                stop_seq.size() - 1)),
+            0 /* tracks currently not extracted */,
+            fbb.CreateVector(utl::all(t->stop_times_)  //
+                             | utl::accumulate(
+                                   [&](std::vector<int>&& times,
+                                       flat_map<stop_time>::entry_t const& st) {
+                                     times.emplace_back(st.second.arr_.time_);
+                                     times.emplace_back(st.second.dep_.time_);
+                                     return std::move(times);
+                                   },
+                                   std::vector<int>())),
+            0 /* route key obsolete */,
+            CreateServiceDebugInfo(fbb, get_or_create_str(t->id_), t->line_,
+                                   t->line_),
+            is_rule_service_participant, 0 /* initial train number */,
+            get_or_create_str(t->id_),
+            utl::get_or_create(
+                fbs_seq_numbers, t->seq_numbers(),
+                [&]() { return fbb.CreateVector(t->seq_numbers()); }),
+            schedule_relationship);
+      };
 
   auto output_services =
       utl::all(trips)  //
@@ -434,20 +374,40 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
           }
           return stop_count < 2;
         })  //
+      | utl::remove_if([&](auto const& entry) {
+          // Rule services are written separately.
+          return entry.second->block_ != nullptr;
+        })  //
+      | utl::remove_if([&](auto const& entry) {
+          // Frequency services are written separately.
+          return entry.second->frequency_.has_value();
+        })  //
       | utl::transform([&](auto const& entry) {
           auto const t = entry.second.get();
           return create_service(
               entry.second.get(), *t->service_,
-              t->block_ != nullptr && t->block_->trips_.size() > 2);  //
+              t->block_ != nullptr && t->block_->trips_.size() > 2,
+              ScheduleRelationship_SCHEDULED);  //
         })  //
       | utl::vec();
+
+  for (auto const& [id, t] : trips) {
+    if (t->frequency_.has_value()) {
+      t->expand_frequencies(
+          [&](trip const& x, ScheduleRelationship const schedule_relationship) {
+            output_services.emplace_back(
+                create_service(&x, *x.service_, false, schedule_relationship));
+          });
+    }
+  }
 
   std::vector<fbs64::Offset<RuleService>> rule_services;
   for (auto const& blk : blocks) {
     for (auto const& [trips, traffic_days] : blk.second->rule_services()) {
       if (trips.size() == 1) {
         output_services.emplace_back(
-            create_service(trips.front(), traffic_days, false));
+            create_service(trips.front(), traffic_days, false,
+                           ScheduleRelationship_SCHEDULED));
         continue;
       }
 
@@ -459,15 +419,21 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
         auto const& b = get<1>(p);
         auto const transition_stop =
             get_or_create_stop(a->stop_times_.back().stop_);
-        rules.emplace_back(CreateRule(
-            fbb, RuleType_THROUGH,
-            utl::get_or_create(
-                services, a,
-                [&] { return create_service(a, traffic_day, true); }),
-            utl::get_or_create(
-                services, b,
-                [&] { return create_service(b, traffic_day, true); }),
-            transition_stop, transition_stop));
+        rules.emplace_back(
+            CreateRule(fbb, RuleType_THROUGH,
+                       utl::get_or_create(services, a,
+                                          [&] {
+                                            return create_service(
+                                                a, traffic_day, true,
+                                                ScheduleRelationship_SCHEDULED);
+                                          }),
+                       utl::get_or_create(services, b,
+                                          [&] {
+                                            return create_service(
+                                                b, traffic_day, true,
+                                                ScheduleRelationship_SCHEDULED);
+                                          }),
+                       transition_stop, transition_stop));
       }
       rule_services.emplace_back(
           CreateRuleService(fbb, fbb.CreateVector(rules)));
@@ -482,10 +448,25 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
                                " (" + feed_pair.second.version_ + ")";
                       });
 
+  std::vector<std::tuple<stop const*, stop const*, transfer>>
+      missing_symmetry_transfers;
+  for (auto const& [p, t] : transfers) {
+    auto const& [from, to] = p;
+    auto const inverse_it = transfers.find({to, from});
+    if (inverse_it == end(transfers)) {
+      l(logging::warn, "adding symmetric transfer: {}({}) -> {}({}): {} min",
+        to->name_, to->id_, from->name_, from->id_, t.minutes_);
+      missing_symmetry_transfers.emplace_back(to, from, t);
+    }
+  }
+  for (auto const& [from, to, t] : missing_symmetry_transfers) {
+    transfers.emplace(stop_pair{from, to}, t);
+  }
+
   auto footpaths =
       utl::all(transfers)  //
       | utl::remove_if([](std::pair<stop_pair, transfer>&& t) {
-          return t.second.type_ != transfer::TIMED_TRANSFER ||
+          return t.second.type_ == transfer::NOT_POSSIBLE ||
                  t.first.first == t.first.second;
         })  //
       | utl::transform([&](std::pair<stop_pair, transfer>&& t) {
@@ -508,11 +489,15 @@ void gtfs_parser::parse(fs::path const& root, fbs64::FlatBufferBuilder& fbb) {
       transfers.emplace(stops, transfer{2, transfer::GENERATED});
     }
   };
+
+  utl::parallel_for(stops, [&](auto const& s) {
+    s.second->compute_close_stations(stop_rtree);
+  });
+
   auto const meta_stations =
       utl::all(stops)  //
       | utl::transform([&](auto const& s) {
-          return std::make_pair(s.second.get(),
-                                s.second->get_metas(stop_vec, stop_rtree));
+          return std::make_pair(s.second.get(), s.second->get_metas(stop_vec));
         })  //
       | utl::remove_if([](auto const& s) { return s.second.empty(); })  //
       |

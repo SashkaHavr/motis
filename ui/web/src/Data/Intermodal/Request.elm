@@ -284,6 +284,7 @@ encodeRequest request =
                     => Encode.list (List.map encodeMode request.destinationModes)
                 , "search_type" => encodeSearchType request.searchType
                 , "search_dir" => encodeSearchDirection request.searchDir
+                , "router" => Encode.string ""
                 ]
         ]
 
@@ -359,6 +360,17 @@ encodeMode mode =
                 , "mode"
                     => Encode.object
                         [ "max_duration" => Encode.int info.maxDuration ]
+                ]
+
+        GBFS info ->
+            Encode.object
+                [ "mode_type" => Encode.string "GBFS"
+                , "mode"
+                    => Encode.object
+                        [ "max_walk_duration" => Encode.int info.maxWalkDuration
+                        , "max_vehicle_duration" => Encode.int info.maxVehicleDuration
+                        , "provider" => Encode.string info.provider
+                        ]
                 ]
 
         Car info ->

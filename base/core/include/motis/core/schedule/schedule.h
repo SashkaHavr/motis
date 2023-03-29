@@ -2,6 +2,8 @@
 
 #include <ctime>
 
+#include "boost/uuid/uuid.hpp"
+
 #include "cista/hash.h"
 #include "cista/memory_holder.h"
 
@@ -11,6 +13,7 @@
 #include "motis/pair.h"
 #include "motis/vector.h"
 
+#include "motis/core/common/dynamic_fws_multimap.h"
 #include "motis/core/common/fws_multimap.h"
 #include "motis/core/common/unixtime.h"
 #include "motis/core/schedule/attribute.h"
@@ -28,13 +31,6 @@
 namespace motis {
 
 struct schedule {
-  schedule() = default;
-  schedule(schedule&&) = delete;
-  schedule(schedule const&) = delete;
-  schedule& operator=(schedule&&) = delete;
-  schedule& operator=(schedule const&) = delete;
-  ~schedule() = default;
-
   unixtime first_event_schedule_time_{std::numeric_limits<time_t>::max()};
   unixtime last_event_schedule_time_{std::numeric_limits<time_t>::min()};
   unixtime schedule_begin_{0}, schedule_end_{0};
@@ -76,6 +72,7 @@ struct schedule {
   mcd::vector<mcd::unique_ptr<mcd::vector<trip::route_edge>>> trip_edges_;
   mcd::vector<mcd::unique_ptr<mcd::vector<ptr<trip>>>> merged_trips_;
   mcd::vector<mcd::unique_ptr<mcd::string>> filenames_;
+  mcd::hash_map<boost::uuids::uuid, ptr<trip>> uuid_to_trip_;
 
   unixtime system_time_{0U}, last_update_timestamp_{0U};
   mcd::vector<mcd::unique_ptr<delay_info>> delay_mem_;
@@ -85,7 +82,13 @@ struct schedule {
   mcd::hash_map<ev_key, mcd::vector<ev_key>> waits_for_trains_;
   mcd::hash_map<ev_key, mcd::vector<ev_key>> trains_wait_for_;
 
-  fws_multimap<ptr<trip>> expanded_trips_;
+  mcd::hash_map<boost::uuids::uuid, mcd::pair<ptr<trip const>, ev_key>>
+      uuid_to_event_;
+  mcd::hash_map<mcd::pair<ptr<trip const>, ev_key>, boost::uuids::uuid>
+      event_to_uuid_;
+
+  dynamic_fws_multimap<ptr<trip>> expanded_trips_;
+  dynamic_fws_multimap<uint32_t> route_to_expanded_routes_;
 };
 
 using schedule_ptr = mcd::unique_ptr<schedule>;

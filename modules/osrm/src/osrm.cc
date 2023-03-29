@@ -1,8 +1,7 @@
 #include "motis/osrm/osrm.h"
 
+#include <filesystem>
 #include <mutex>
-
-#include "boost/filesystem.hpp"
 
 #include "cista/reflection/comparable.h"
 
@@ -12,7 +11,6 @@
 #include "extractor/extractor_config.hpp"
 
 #include "motis/core/common/logging.h"
-#include "motis/module/clog_redirect.h"
 #include "motis/module/context/motis_parallel_for.h"
 #include "motis/module/context/motis_publish.h"
 #include "motis/module/event_collector.h"
@@ -24,7 +22,7 @@
 using namespace motis::module;
 using namespace motis::logging;
 
-namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
 
 namespace motis::osrm {
 
@@ -110,23 +108,32 @@ bool osrm::import_successful() const {
 }
 
 void osrm::init(motis::module::registry& reg) {
-  reg.subscribe("/init", [this] { init_async(); });
-  reg.register_op("/osrm/table", [this](msg_ptr const& msg) {
-    auto const req = motis_content(OSRMManyToManyRequest, msg);
-    return get_router(req->profile()->str())->table(req);
-  });
-  reg.register_op("/osrm/one_to_many", [this](msg_ptr const& msg) {
-    auto const req = motis_content(OSRMOneToManyRequest, msg);
-    return get_router(req->profile()->str())->one_to_many(req);
-  });
-  reg.register_op("/osrm/via", [this](msg_ptr const& msg) {
-    auto const req = motis_content(OSRMViaRouteRequest, msg);
-    return get_router(req->profile()->str())->via(req);
-  });
-  reg.register_op("/osrm/smooth_via", [this](msg_ptr const& msg) {
-    auto const req = motis_content(OSRMSmoothViaRouteRequest, msg);
-    return get_router(req->profile()->str())->smooth_via(req);
-  });
+  reg.subscribe("/init", [this] { init_async(); }, {});
+  reg.register_op("/osrm/table",
+                  [this](msg_ptr const& msg) {
+                    auto const req = motis_content(OSRMManyToManyRequest, msg);
+                    return get_router(req->profile()->str())->table(req);
+                  },
+                  {});
+  reg.register_op("/osrm/one_to_many",
+                  [this](msg_ptr const& msg) {
+                    auto const req = motis_content(OSRMOneToManyRequest, msg);
+                    return get_router(req->profile()->str())->one_to_many(req);
+                  },
+                  {});
+  reg.register_op("/osrm/via",
+                  [this](msg_ptr const& msg) {
+                    auto const req = motis_content(OSRMViaRouteRequest, msg);
+                    return get_router(req->profile()->str())->via(req);
+                  },
+                  {});
+  reg.register_op("/osrm/smooth_via",
+                  [this](msg_ptr const& msg) {
+                    auto const req =
+                        motis_content(OSRMSmoothViaRouteRequest, msg);
+                    return get_router(req->profile()->str())->smooth_via(req);
+                  },
+                  {});
 }
 
 void osrm::init_async() {

@@ -17,6 +17,8 @@
 
 #include "conf/date_time.h"
 
+#include "fmt/format.h"
+
 #include "tar/file_reader.h"
 #include "tar/tar_reader.h"
 #include "tar/zstd_reader.h"
@@ -34,9 +36,11 @@
 #include "motis/core/access/time_access.h"
 #include "motis/core/conv/trip_conv.h"
 #include "motis/core/journey/print_trip.h"
+
 #include "motis/module/context/motis_http_req.h"
 #include "motis/module/context/motis_publish.h"
 #include "motis/module/context/motis_spawn.h"
+
 #include "motis/ris/gtfs-rt/common.h"
 #include "motis/ris/gtfs-rt/gtfsrt_parser.h"
 #include "motis/ris/gtfs-rt/util.h"
@@ -83,6 +87,11 @@ constexpr auto const MIN_DAY_DB = "MIN_DAY_DB";
 //        earliest <= day.end && latest >= day.begin
 constexpr auto const MAX_DAY_DB = "MAX_DAY_DB";
 
+// stores the latest stream offset received for each rabbitmq stream
+// key: rabbitmq stream identifier
+// value: stream offset of the latest message that was received
+constexpr auto const STREAM_OFFSET_DB = "STREAM_OFFSET_DB";
+
 constexpr auto const BATCH_SIZE = unixtime{3600};
 
 constexpr auto const WRITE_MSG_BUF_MAX_SIZE = 50000;
@@ -121,6 +130,12 @@ std::string_view from_unixtime(unixtime const& t) {
   return {reinterpret_cast<char const*>(&t), sizeof(t)};
 }
 
+template <typename Publisher>
+inline void update_system_time(schedule& sched, Publisher const& pub) {
+  sched.system_time_ = std::max(sched.system_time_, pub.max_timestamp_);
+  sched.last_update_timestamp_ = std::time(nullptr);
+}
+
 struct ris::impl {
   /**
    * Extracts the station prefix + directory path from a string formed
@@ -135,8 +150,8 @@ struct ris::impl {
     using source_t = std::variant<net::http::client::request, fs::path>;
     enum class source_type { path, url };
 
-    input(schedule const& sched, std::string const& in)
-        : input{sched, split(in)} {}
+    input(schedule const& sched, config const& c, std::string const& in)
+        : input{sched, c, split(in)} {}
 
     std::string str() const {
       return std::visit(
@@ -167,7 +182,9 @@ struct ris::impl {
     net::http::client::request get_request() const {
       utl::verify(std::holds_alternative<net::http::client::request>(src_),
                   "no url {}", str());
-      return std::get<net::http::client::request>(src_);
+      auto req = std::get<net::http::client::request>(src_);
+      return config_.http_proxy_.empty() ? req
+                                         : req.set_proxy(config_.http_proxy_);
     }
 
     std::string const& tag() const { return tag_; }
@@ -175,9 +192,10 @@ struct ris::impl {
     gtfsrt::knowledge_context& gtfs_knowledge() { return gtfs_knowledge_; }
 
   private:
-    input(schedule const& sched,
+    input(schedule const& sched, config const& c,
           std::pair<source_t, std::string>&& path_and_tag)
-        : src_{std::move(path_and_tag.first)},
+        : config_{c},
+          src_{std::move(path_and_tag.first)},
           tag_{path_and_tag.second},
           gtfs_knowledge_{path_and_tag.second, sched} {}
 
@@ -213,6 +231,8 @@ struct ris::impl {
       }
     }
 
+    config const& config_;
+
     source_t src_;
     std::string tag_;
 
@@ -236,13 +256,25 @@ struct ris::impl {
       return;
     }
 
+    if (config_.rabbitmq_resume_stream_) {
+      auto const stored_stream_offset =
+          get_stream_offset(get_queue_id(config_.rabbitmq_));
+      if (stored_stream_offset) {
+        LOG(info) << "rabbitmq: resuming at stored stream offset "
+                  << *stored_stream_offset;
+        config_.rabbitmq_.numeric_stream_offset_ = *stored_stream_offset + 1;
+      } else {
+        LOG(info) << "rabbitmq: no stored stream offset found, resuming at "
+                  << config_.rabbitmq_.stream_offset_;
+      }
+    }
+
     ribasis_receiver_ = std::make_unique<amqp::ssl_connection>(
         &config_.rabbitmq_, [](std::string const& log_msg) {
           LOG(info) << "rabbitmq: " << log_msg;
         });
-    ribasis_receiver_->run([this, d, sched, buffer = std::vector<amqp::msg>{}](
-                               amqp::msg const& m) mutable {
-      buffer.emplace_back(m);
+    ribasis_receiver_->run([this, d, sched](amqp::msg const& m) mutable {
+      ribasis_buffer_.emplace_back(m);
 
       if (auto const n = now();
           (n - ribasis_receiver_last_update_) < config_.update_interval_) {
@@ -250,12 +282,15 @@ struct ris::impl {
       } else {
         ribasis_receiver_last_update_ = n;
 
-        auto msgs_copy = buffer;
-        buffer.clear();
+        auto msgs_copy = ribasis_buffer_;
+        ribasis_buffer_.clear();
 
         d->enqueue(
             ctx_data{d},
             [this, sched, msgs = std::move(msgs_copy)]() {
+              if (msgs.empty()) {
+                return;
+              }
               publisher pub;
               pub.schedule_res_id_ =
                   to_res_id(::motis::module::global_res_id::SCHEDULE);
@@ -273,8 +308,13 @@ struct ris::impl {
                     file_type::JSON, pub);
               }
 
-              sched->system_time_ = pub.max_timestamp_;
-              sched->last_update_timestamp_ = std::time(nullptr);
+              auto const stream_offset = msgs.back().stream_offset_;
+              auto const queue_id = get_queue_id(config_.rabbitmq_);
+              if (stream_offset) {
+                store_stream_offset(queue_id, *stream_offset);
+              }
+
+              update_system_time(*sched, pub);
 
               if (rabbitmq_log_enabled_) {
                 rabbitmq_log_file_
@@ -289,7 +329,7 @@ struct ris::impl {
             },
             ctx::op_id{"ribasis_receive", CTX_LOCATION, 0U}, ctx::op_type_t::IO,
             ctx::accesses_t{ctx::access_request{
-                to_res_id(::motis::module::global_res_id::SCHEDULE),
+                to_res_id(::motis::module::global_res_id::RIS_DATA),
                 ctx::access_t::WRITE}});
       }
     });
@@ -309,26 +349,31 @@ struct ris::impl {
     pub.schedule_res_id_ = to_res_id(::motis::module::global_res_id::SCHEDULE);
 
     for (auto const& [f, in] : utl::zip(futures, inputs)) {
-      parse_str_and_write_to_db(*in, f->val().body, file_type::PROTOBUF, pub);
+      try {
+        parse_str_and_write_to_db(*in, f->val().body, file_type::PROTOBUF, pub);
+      } catch (std::exception const& e) {
+        LOG(logging::error)
+            << "input source \"" << in->str() << "\": " << e.what();
+      }
     }
 
-    sched.system_time_ = pub.max_timestamp_;
-    sched.last_update_timestamp_ = std::time(nullptr);
+    update_system_time(sched, pub);
     publish_system_time_changed(pub.schedule_res_id_);
   }
 
   void init(dispatcher& d, schedule& sched) {
     inputs_ = utl::to_vec(config_.input_, [&](std::string const& in) {
-      return input{sched, in};
+      return input{sched, config_, in};
     });
-    file_upload_ = std::make_unique<input>(sched, "");
+    file_upload_ = std::make_unique<input>(sched, config_, "");
 
     if (config_.clear_db_ && fs::exists(config_.db_path_)) {
       LOG(info) << "clearing database path " << config_.db_path_;
       fs::remove_all(config_.db_path_);
+      fs::remove_all(config_.db_path_ + "-lock");
     }
 
-    env_.set_maxdbs(4);
+    env_.set_maxdbs(5);
     env_.set_mapsize(config_.db_max_size_);
 
     try {
@@ -344,6 +389,7 @@ struct ris::impl {
     t.dbi_open(MSG_DB, db::dbi_flags::CREATE | db::dbi_flags::INTEGERKEY);
     t.dbi_open(MIN_DAY_DB, db::dbi_flags::CREATE | db::dbi_flags::INTEGERKEY);
     t.dbi_open(MAX_DAY_DB, db::dbi_flags::CREATE | db::dbi_flags::INTEGERKEY);
+    t.dbi_open(STREAM_OFFSET_DB, db::dbi_flags::CREATE);
     t.commit();
 
     std::vector<input> urls;
@@ -374,12 +420,12 @@ struct ris::impl {
           boost::posix_time::seconds{config_.update_interval_},
           [this, &sched]() { update_gtfs_rt(sched); },
           ctx::accesses_t{ctx::access_request{
-              to_res_id(::motis::module::global_res_id::SCHEDULE),
+              to_res_id(::motis::module::global_res_id::RIS_DATA),
               ctx::access_t::WRITE}});
     }
 
     if (config_.init_time_.unix_time_ != 0) {
-      forward(sched, 0U, config_.init_time_.unix_time_);
+      forward(sched, 0U, config_.init_time_.unix_time_, true);
     }
 
     init_ribasis_receiver(&d, &sched);
@@ -406,8 +452,7 @@ struct ris::impl {
     parse_str_and_write_to_db(*file_upload_,
                               {content->c_str(), content->size()}, ft, pub);
 
-    sched.system_time_ = pub.max_timestamp_;
-    sched.last_update_timestamp_ = std::time(nullptr);
+    update_system_time(sched, pub);
     publish_system_time_changed(pub.schedule_res_id_);
     return {};
   }
@@ -419,8 +464,7 @@ struct ris::impl {
         parse_sequential(sched, in, pub);
       }
     }
-    sched.system_time_ = pub.max_timestamp_;
-    sched.last_update_timestamp_ = std::time(nullptr);
+    update_system_time(sched, pub);
     publish_system_time_changed(pub.schedule_res_id_);
     return {};
   }
@@ -468,16 +512,27 @@ struct ris::impl {
     auto& sched = *res_lock.get<schedule_data>(schedule_res_id).schedule_;
 
     publisher pub{schedule_res_id};
+    auto successful = 0ULL;
+    auto failed = 0ULL;
     for (auto const& rim : *req->input_messages()) {
-      parse_and_publish_message(rim, pub);
+      if (parse_and_publish_message(rim, pub)) {
+        ++successful;
+      } else {
+        ++failed;
+      }
     }
 
     pub.flush();
-    sched.system_time_ = std::max(sched.system_time_, pub.max_timestamp_);
-    sched.last_update_timestamp_ = std::time(nullptr);
+    update_system_time(sched, pub);
 
     publish_system_time_changed(schedule_res_id);
-    return {};
+
+    message_creator mc;
+    mc.create_and_finish(
+        MsgContent_RISApplyResponse,
+        CreateRISApplyResponse(mc, sched.system_time_, successful, failed)
+            .Union());
+    return make_msg(mc);
   }
 
   struct publisher {
@@ -492,9 +547,12 @@ struct ris::impl {
     ~publisher() { flush(); }
 
     void flush() {
-      if (offsets_.empty()) {
+      if (offsets_.empty() || skip_flush_) {
         return;
       }
+      // prevent the destructor from running flush() again if an exception
+      // occurs inside flush()
+      skip_flush_ = true;
 
       fbb_.create_and_finish(
           MsgContent_RISBatch,
@@ -507,6 +565,7 @@ struct ris::impl {
       offsets_.clear();
 
       ctx::await_all(motis_publish(msg));
+      skip_flush_ = false;
     }
 
     void add(uint8_t const* ptr, size_t const size) {
@@ -524,7 +583,8 @@ struct ris::impl {
     message_creator fbb_;
     std::vector<flatbuffers::Offset<MessageHolder>> offsets_;
     unixtime max_timestamp_ = 0;
-    ctx::res_id_t schedule_res_id_{};
+    bool skip_flush_{false};
+    ctx::res_id_t schedule_res_id_{0U};
   };
 
   struct null_publisher {
@@ -536,7 +596,7 @@ struct ris::impl {
   } null_pub_;
 
   void forward(schedule& sched, ctx::res_id_t schedule_res_id,
-               unixtime const to) {
+               unixtime const to, bool force_update_system_time = false) {
     auto const first_schedule_event_day =
         sched.first_event_schedule_time_ != std::numeric_limits<unixtime>::max()
             ? floor(sched.first_event_schedule_time_,
@@ -554,6 +614,11 @@ struct ris::impl {
               std::max(*min_timestamp, sched.system_time_ + 1), to);
     } else {
       LOG(info) << "ris database has no relevant data";
+      if (force_update_system_time) {
+        LOG(info) << "updating system time to " << format_unix_time(to)
+                  << " anyway";
+        sched.system_time_ = to;
+      }
     }
   }
 
@@ -727,8 +792,7 @@ struct ris::impl {
       try {
         parse_file_and_write_to_db(in, path, type, pub);
         if (config_.instant_forward_) {
-          sched.system_time_ = pub.max_timestamp_;
-          sched.last_update_timestamp_ = std::time(nullptr);
+          update_system_time(sched, pub);
           try {
             publish_system_time_changed(pub.schedule_res_id_);
           } catch (std::system_error& e) {
@@ -945,6 +1009,31 @@ struct ris::impl {
     t.commit();
   }
 
+  void store_stream_offset(std::string const& queue_id,
+                           std::int64_t stream_offset) {
+    auto t = db::txn{env_};
+    auto db = t.dbi_open(STREAM_OFFSET_DB);
+    t.put(db, queue_id,
+          std::string_view{reinterpret_cast<char const*>(&stream_offset),
+                           sizeof(stream_offset)});
+    t.commit();
+  }
+
+  std::optional<std::int64_t> get_stream_offset(std::string const& queue_id) {
+    auto t = db::txn{env_};
+    auto db = t.dbi_open(STREAM_OFFSET_DB);
+    if (auto const val = t.get(db, queue_id); val) {
+      return {lmdb::as_int<std::int64_t>(*val)};
+    } else {
+      return {};
+    }
+  }
+
+  static std::string get_queue_id(amqp::login const& login) {
+    return fmt::format("{}:{}/{}/{}", login.host_, login.port_, login.vhost_,
+                       login.queue_);
+  }
+
   static void publish_system_time_changed(ctx::res_id_t schedule_res_id) {
     message_creator mc;
     mc.create_and_finish(
@@ -955,7 +1044,7 @@ struct ris::impl {
   }
 
   template <typename Publisher>
-  void parse_and_publish_message(RISInputMessage const* rim, Publisher& pub) {
+  bool parse_and_publish_message(RISInputMessage const* rim, Publisher& pub) {
     auto content_sv =
         std::string_view{rim->content()->c_str(), rim->content()->size()};
 
@@ -965,12 +1054,10 @@ struct ris::impl {
 
     switch (rim->type()) {
       case RISContentType_RIBasis: {
-        ribasis::to_ris_message(content_sv, handle_message);
-        break;
+        return ribasis::to_ris_message(content_sv, handle_message);
       }
       case RISContentType_RISML: {
-        risml::to_ris_message(content_sv, handle_message);
-        break;
+        return risml::to_ris_message(content_sv, handle_message);
       }
       default: throw utl::fail("ris: unsupported message type");
     }
@@ -996,6 +1083,8 @@ struct ris::impl {
 
   bool rabbitmq_log_enabled_{false};
   std::ofstream rabbitmq_log_file_;
+
+  std::vector<amqp::msg> ribasis_buffer_;
 };
 
 ris::ris() : module("RIS", "ris") {
@@ -1010,6 +1099,7 @@ ris::ris() : module("RIS", "ris") {
         "automatically forward after every file during read");
   param(config_.gtfs_is_addition_skip_allowed_,
         "gtfsrt.is_addition_skip_allowed", "allow skips on additional trips");
+  param(config_.http_proxy_, "http_proxy", "proxy for HTTP requests");
   param(config_.update_interval_, "update_interval",
         "RT update interval in seconds (RabbitMQ messages get buffered)");
   param(config_.rabbitmq_.host_, "rabbitmq.host", "RabbitMQ remote host");
@@ -1026,11 +1116,23 @@ ris::ris() : module("RIS", "ris") {
   param(config_.rabbitmq_log_, "rabbitmq.log",
         "Path to log file for RabbitMQ messages (set to empty string to "
         "disable logging)");
+  param(config_.rabbitmq_.prefetch_count_, "rabbitmq.prefetch_count",
+        "Number of RabbitMQ messages to prefetch (must be > 0 if using "
+        "RabbitMQ streams)");
+  param(config_.rabbitmq_.stream_offset_, "rabbitmq.stream_offset",
+        "Stream offset if using RabbitMQ streams (e.g. next, 2h, 1D...)");
+  param(config_.rabbitmq_resume_stream_, "rabbitmq.resume_stream",
+        "Resume stream at last received stream offset (if using RabbitMQ "
+        "streams)");
 }
 
 ris::~ris() = default;
 
-void ris::stop_io() { impl_->stop_io(); }
+void ris::stop_io() {
+  if (impl_) {
+    impl_->stop_io();
+  }
+}
 
 void ris::reg_subc(motis::module::subc_reg& r) {
   r.register_cmd(
@@ -1072,6 +1174,7 @@ void ris::reg_subc(motis::module::subc_reg& r) {
 
 void ris::init(motis::module::registry& r) {
   impl_ = std::make_unique<impl>(config_);
+  add_shared_data(to_res_id(global_res_id::RIS_DATA), 0);
   r.subscribe(
       "/init",
       [this]() {
@@ -1079,7 +1182,7 @@ void ris::init(motis::module::registry& r) {
                     const_cast<schedule&>(get_sched()));  // NOLINT
       },
       ctx::accesses_t{ctx::access_request{
-          to_res_id(::motis::module::global_res_id::SCHEDULE),
+          to_res_id(::motis::module::global_res_id::RIS_DATA),
           ctx::access_t::WRITE}});
   r.register_op(
       "/ris/upload",
@@ -1087,7 +1190,7 @@ void ris::init(motis::module::registry& r) {
         return impl_->upload(const_cast<schedule&>(get_sched()), m);  // NOLINT
       },
       ctx::accesses_t{ctx::access_request{
-          to_res_id(::motis::module::global_res_id::SCHEDULE),
+          to_res_id(::motis::module::global_res_id::RIS_DATA),
           ctx::access_t::WRITE}});
   r.register_op("/ris/forward",
                 [this](auto&& m) { return impl_->forward(*this, m); }, {});
@@ -1097,12 +1200,12 @@ void ris::init(motis::module::registry& r) {
         return impl_->read(const_cast<schedule&>(get_sched()), m);  // NOLINT
       },
       ctx::accesses_t{ctx::access_request{
-          to_res_id(::motis::module::global_res_id::SCHEDULE),
+          to_res_id(::motis::module::global_res_id::RIS_DATA),
           ctx::access_t::WRITE}});
   r.register_op(
       "/ris/purge", [this](auto&& m) { return impl_->purge(m); },
       ctx::accesses_t{ctx::access_request{
-          to_res_id(::motis::module::global_res_id::SCHEDULE),
+          to_res_id(::motis::module::global_res_id::RIS_DATA),
           ctx::access_t::WRITE}});
   r.register_op("/ris/apply",
                 [this](auto&& m) { return impl_->apply(*this, m); }, {});

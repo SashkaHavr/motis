@@ -33,13 +33,22 @@ void print_leg(schedule const& sched, journey_leg const& leg) {
              exit_station->eva_nr_.str(), exit_station->name_.str());
   if (leg.enter_transfer_) {
     fmt::print("  enter_transfer={:2} {}\n", leg.enter_transfer_->duration_,
-               leg.enter_transfer_->type_ == transfer_info::type::SAME_STATION
-                   ? "SAME_STATION"
-                   : "FOOTPATH");
+               leg.enter_transfer_->type_);
   } else {
     fmt::print("\n");
   }
   print_trip(sched, leg.trip_idx_);
+}
+
+void print_final_footpath(schedule const& sched, final_footpath const& fp) {
+  if (fp.is_footpath()) {
+    auto const& from_station = sched.stations_.at(fp.from_station_id_);
+    auto const& to_station = sched.stations_.at(fp.to_station_id_);
+    fmt::print("  {:7} {:7} {:50} -> {:6}m {:7} {:50}", "FINFOOT",
+               from_station->eva_nr_.str(), from_station->name_.str(),
+               fp.duration_, to_station->eva_nr_.str(),
+               to_station->name_.str());
+  }
 }
 
 void print_trip_section(schedule const& sched,

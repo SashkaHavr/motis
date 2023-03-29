@@ -35,8 +35,10 @@ jobs:
       - uses: actions/checkout@v3
       - uses: seanmiddleditch/gha-setup-ninja@master
 
-      - name: buildcache Cache
-        uses: actions/cache@v2
+      # ==== RESTORE CACHE ====
+      - name: Restore buildcache Cache
+        uses: actions/cache/restore@v3
+        id: restore-buildcache
         with:
           path: ${{ github.workspace }}/.buildcache
           key: buildcache-wnds-${{ matrix.config.mode }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-${{ hashFiles('**/*.cc') }}
@@ -45,19 +47,19 @@ jobs:
             buildcache-wnds-${{ matrix.config.mode }}-${{ hashFiles('.pkg') }}-
             buildcache-wnds-${{ matrix.config.mode }}-
 
-      - name: Dependencies Cache
-        uses: actions/cache@v2
+      - name: Restore Dependencies Cache
+        uses: actions/cache/restore@v3
+        id: restore-deps-cache
         with:
           path: ${{ github.workspace }}/deps
           key: deps-${{ hashFiles('.pkg') }}
           restore-keys: deps-
 
+      # ==== BUILD ====
+      - uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build
         run: |
-          $devShell = &"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find **\Microsoft.VisualStudio.DevShell.dll
-          $installPath = &"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationpath
-          Import-Module $devShell
-          Enter-VsDevShell -VsInstallPath $installPath -SkipAutomaticLocation -DevCmdArguments "-arch=amd64"
           cmake `
             -GNinja -S . -B build `
             -DCMAKE_BUILD_TYPE=${{ matrix.config.mode }} `
@@ -80,6 +82,7 @@ jobs:
           --import.paths schedule:base/loader/test_resources/hrd_schedules/single-ice
           --dataset.begin 20151004
           --dataset.write_serialized false
+          --nigiri.no_cache true
           --exclude_modules address osrm parking path ppr tiles gbfs
 
       - name: Run Tests
@@ -98,7 +101,7 @@ jobs:
 
       - name: pnpm Cache
         if: matrix.config.webui == 'On'
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.pnpm-store
           key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -106,10 +109,10 @@ jobs:
             pnpm-${{ runner.os }}-
 
       - name: Install RSL Web Interface Dependencies
-        uses: pnpm/action-setup@v2.2.0
+        uses: pnpm/action-setup@v2
         if: matrix.config.webui == 'On'
         with:
-          version: ^6.32.2
+          version: ^7.15.0
           run_install: |
             - cwd: ./ui/rsl
 
@@ -117,6 +120,20 @@ jobs:
         if: matrix.config.webui == 'On'
         run: pnpm run build
         working-directory: ./ui/rsl
+
+      # ==== API DOCS ====
+      - name: Install Protocol Tool Dependencies
+        if: matrix.config.mode == 'Release'
+        uses: pnpm/action-setup@v2
+        with:
+          version: ^7.15.0
+          run_install: |
+            - cwd: tools/protocol
+
+      - name: Run Protocol Tool
+        if: matrix.config.mode == 'Release'
+        run: pnpm start --skip rsl-ui
+        working-directory: tools/protocol
 
       # ==== DISTRIBUTION ====
       - name: Move Profiles
@@ -132,7 +149,14 @@ jobs:
           mkdir web
           Copy-Item .\ui\web\external_lib,.\ui\web\img,.\ui\web\js,.\ui\web\style .\web\ -Recurse
           Copy-Item .\ui\web\*.html,.\ui\web\*.js,.\ui\web\*.ico .\web\
+          Copy-Item .\ui\web\openapi .\web\ -Recurse
           Copy-Item .\ui\rsl\dist .\web\rsl -Recurse
+
+      - name: Move API Docs
+        if: matrix.config.mode == 'Release'
+        run: |
+          Copy-Item .\docs\generated\openapi-3.1\openapi.yaml .\web\openapi\openapi.yaml
+          Copy-Item .\docs\generated\openapi-3.0\openapi.yaml .\web\openapi\openapi-3.0.yaml
 
       - name: Create Distribution
         if: matrix.config.mode == 'Release'
@@ -162,3 +186,18 @@ jobs:
           asset_path: ./motis-windows.zip
           asset_name: motis-windows.zip
           asset_content_type: application/zip
+
+      # ==== SAVE CACHE ====
+      - name: Save buildcache Cache
+        if: always()
+        uses: actions/cache/save@v3
+        with:
+          path: ${{ github.workspace }}/.buildcache
+          key: ${{ steps.restore-buildcache.outputs.cache-primary-key }}
+
+      - name: Save Dependencies Cache
+        if: always()
+        uses: actions/cache/save@v3
+        with:
+          path: ${{ github.workspace }}/deps
+          key: ${{ steps.restore-deps-cache.outputs.cache-primary-key }}
