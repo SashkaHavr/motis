@@ -5,8 +5,7 @@
 namespace motis::mcraptor {
 
 struct additional_start {
-  additional_start(stop_id const s_id, time const offset)
-      : s_id_{s_id}, offset_{offset} {}
+  additional_start() = delete;
 
   stop_id s_id_;
   time offset_;
