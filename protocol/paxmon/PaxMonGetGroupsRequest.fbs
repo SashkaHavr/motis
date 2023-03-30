@@ -5,8 +5,10 @@ namespace motis.paxmon;
 table PaxMonGetGroupsRequest {
   universe: uint;
 
-  ids: [uint];
+  ids: [ulong];
   sources: [PaxMonDataSource];
 
-  include_reroute_log: bool;
+  all_generations: bool;
+  include_localization: bool;
+  preparation_time: short; // min
 }

@@ -20,7 +20,6 @@
 #include "motis/rt/separate_trip.h"
 #include "motis/rt/track_change.h"
 #include "motis/rt/trip_correction.h"
-#include "motis/rt/trip_formation_handler.h"
 #include "motis/rt/update_constant_graph.h"
 #include "motis/rt/validate_constant_graph.h"
 #include "motis/rt/validity_check.h"
@@ -48,9 +47,9 @@ msg_ptr rt_handler::update(msg_ptr const& msg) {
     try {
       update(m->message_nested_root());
     } catch (std::exception const& e) {
-      LOG(logging::error) << "rt::on_message: UNEXPECTED ERROR: " << e.what();
+      printf("rt::on_message: UNEXPECTED ERROR: %s\n", e.what());
     } catch (...) {
-      LOG(logging::error) << "rt::on_message: UNEXPECTED UNKNOWN ERROR";
+      printf("rt::on_message: UNEXPECTED UNKNOWN ERROR\n");
     }
   }
   return nullptr;
@@ -191,7 +190,7 @@ void rt_handler::update(motis::ris::Message const* m) {
       }
 
       if (separate_trp != nullptr) {
-        separate_trip(sched_, separate_trp, update_builder_);
+        seperate_trip(sched_, separate_trp);
         resolved = resolve();
         stats_.track_separations_++;
       }
@@ -251,13 +250,6 @@ void rt_handler::update(motis::ris::Message const* m) {
       break;
     }
 
-    case ris::MessageUnion_TripFormationMessage: {
-      handle_trip_formation_msg(
-          stats_, sched_, update_builder_,
-          reinterpret_cast<ris::TripFormationMessage const*>(c));
-      break;
-    }
-
     default: break;
   }
 }
@@ -279,19 +271,9 @@ void rt_handler::propagate() {
 
     auto const edge_fit = fits_edge(k, t);
     auto const trip_fit = fits_trip(sched_, k, t);
-
-    stats_.edge_fit_ += !edge_fit ? 1 : 0;
-    stats_.trip_fit_ += !trip_fit ? 1 : 0;
-    stats_.edge_fit_and_trip_fit_ += (!edge_fit && !trip_fit) ? 1 : 0;
-    ++stats_.total_;
-
     if (!edge_fit || !trip_fit) {
-      stats_.edge_fit_or_trip_fit_ += (!edge_fit || !trip_fit) ? 1 : 0;
       auto const trp = sched_.merged_trips_[k.lcon()->trips_]->front();
-
-      if (!edge_fit) {
-        separate_trip(sched_, trp, update_builder_);
-      }
+      seperate_trip(sched_, trp);
 
       if (!trip_fit) {
         trips_to_correct.insert(trp);
@@ -311,14 +293,11 @@ void rt_handler::propagate() {
   }
 
   for (auto const& trp : trips_to_correct) {
+    assert(trp->lcon_idx_ == 0 &&
+           trp->edges_->front()->m_.route_edge_.conns_.size() == 1);
     for (auto const& di : trip_corrector(sched_, trp).fix_times()) {
       update_builder_.add_delay(di);
       updated_route_edges.insert(di->get_ev_key().route_edge_);
-
-      if (!fits_edge(di->get_ev_key(), di->get_current_time())) {
-        ++stats_.edge_fit_1_;
-        separate_trip(sched_, di->get_ev_key(), update_builder_);
-      }
     }
   }
 

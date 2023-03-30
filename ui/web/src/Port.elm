@@ -2,7 +2,6 @@ port module Port exposing
     ( clearRailVizError
     , handleRailVizError
     , localStorageSet
-    , setGBFSSearchOptions
     , setPPRSearchOptions
     , setRoutingResponses
     , setSimulationTime
@@ -44,6 +43,3 @@ port localStorageSet : ( String, String ) -> Cmd msg
 
 
 port setPPRSearchOptions : Json.Encode.Value -> Cmd msg
-
-
-port setGBFSSearchOptions : Json.Encode.Value -> Cmd msg

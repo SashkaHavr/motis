@@ -7,7 +7,6 @@
 
 #include "cista/reflection/comparable.h"
 
-#include "motis/core/schedule/connection.h"
 #include "motis/loader/gtfs/agency.h"
 #include "motis/loader/loaded_file.h"
 
@@ -41,7 +40,6 @@ struct route {
         type_(type) {}
 
   static std::map<unsigned, category> const s_types;
-  static std::map<service_class, int> const s_clasz;
 
   std::optional<category> get_category() const;
 

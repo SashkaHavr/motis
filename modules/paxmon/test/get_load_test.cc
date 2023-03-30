@@ -14,7 +14,6 @@
 
 #include "motis/paxmon/get_load.h"
 #include "motis/paxmon/get_load_internal.h"
-#include "motis/paxmon/group_route.h"
 #include "motis/paxmon/passenger_group.h"
 #include "motis/paxmon/passenger_group_container.h"
 #include "motis/paxmon/pci_container.h"
@@ -25,43 +24,28 @@ namespace motis::paxmon {
 
 namespace {
 
-struct test_pg {
-  std::uint16_t passengers_{};
-  float probability_{};
-};
-
-inline test_pg mk_pg(std::uint16_t passengers, float probability) {
-  return test_pg{passengers, probability};
+inline passenger_group mk_pg(std::uint16_t passengers, float probability) {
+  return make_passenger_group({}, {}, passengers, INVALID_TIME,
+                              group_source_flags::NONE, probability);
 }
 
-inline void add_group(passenger_group_container& pgc, test_pg const& tpg) {
-  auto* pg = pgc.add(make_passenger_group({}, tpg.passengers_));
-  auto routes = pgc.routes(pg->id_);
-  routes.emplace_back(
-      make_group_route(0, 0, 0, tpg.probability_, tpg.probability_ == 1));
-  // NOTE: compact journey, route edges not set up = invalid indices!
-}
-
-inline passenger_group_container mk_pgc(std::vector<test_pg>&& tpgs) {
+inline passenger_group_container mk_pgc(std::vector<passenger_group>&& pgs) {
   passenger_group_container pgc;
-  for (auto& tpg : tpgs) {
-    add_group(pgc, tpg);
+  for (auto& pg : pgs) {
+    pgc.add(std::move(pg));
   }
   return pgc;
 }
 
-inline pci_group_routes mk_pci(passenger_group_container const& pgc,
-                               pci_container& pcis) {
+inline pci_groups mk_pci(passenger_group_container const& pgc,
+                         pci_container& pcis) {
   auto const idx = pcis.insert();
-  auto group_routes = pcis.group_routes_[idx];
+  auto groups = pcis.groups_[idx];
   for (auto const& pg : pgc) {
-    for (auto const& gr : pgc.routes(pg->id_)) {
-      group_routes.emplace_back(
-          passenger_group_with_route{pg->id_, gr.local_group_route_index_});
-    }
+    groups.emplace_back(pg->id_);
   }
   pcis.init_expected_load(pgc, idx);
-  return group_routes;
+  return groups;
 }
 
 inline pax_pdf make_pdf(std::map<std::uint16_t, float> const& m) {
@@ -238,11 +222,11 @@ TEST(paxmon_get_load, base_eq_avx) {
     pgc.reserve(base_group_count + fc_group_count);
 
     for (auto grp = 0; grp < base_group_count; ++grp) {
-      add_group(pgc, mk_pg(get_group_size(), 1.0F));
+      pgc.add(mk_pg(get_group_size(), 1.0F));
     }
 
     for (auto grp = 0; grp < fc_group_count; ++grp) {
-      add_group(pgc, mk_pg(get_group_size(), prob_dist(gen)));
+      pgc.add(mk_pg(get_group_size(), prob_dist(gen)));
     }
 
     auto pcis = pci_container{};
@@ -252,12 +236,15 @@ TEST(paxmon_get_load, base_eq_avx) {
 
     ASSERT_THAT(pdf_avx.data_, Pointwise(FloatNear(1E-5F), pdf_base.data_));
 
-    auto add_grps = std::vector<additional_group>{};
+    auto add_pgs = std::vector<passenger_group>{};
+    auto add_grps = std::vector<std::pair<passenger_group const*, float>>{};
     auto const add_group_count = add_group_count_dist(gen);
+    add_pgs.reserve(add_group_count);
     add_grps.reserve(add_group_count);
     for (auto grp = 0; grp < add_group_count; ++grp) {
       auto const prob = prob_dist(gen);
-      add_grps.emplace_back(additional_group{get_group_size(), prob});
+      auto const& pg = add_pgs.emplace_back(mk_pg(get_group_size(), prob));
+      add_grps.emplace_back(&pg, prob);
     }
 
     add_additional_groups_base(pdf_base, add_grps);

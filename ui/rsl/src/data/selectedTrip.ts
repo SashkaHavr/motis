@@ -1,7 +1,8 @@
-import { atom } from "jotai";
+import { atomWithHash } from "jotai/utils";
 
 import { TripServiceInfo } from "@/api/protocol/motis";
 
-export const mostRecentlySelectedTripAtom = atom<TripServiceInfo | undefined>(
+export const selectedTripAtom = atomWithHash<TripServiceInfo | undefined>(
+  "trip",
   undefined
 );

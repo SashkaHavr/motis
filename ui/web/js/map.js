@@ -247,7 +247,6 @@ function initPorts(app, apiEndpoint, tilesEndpoint, initialPermalink) {
       bearing: bearing,
       pitch: pitch,
       style: {
-        glyphs: `${tilesEndpoint}glyphs/{fontstack}/{range}.pbf`,
         version: 8,
         sources: {},
         layers: [],
@@ -263,7 +262,6 @@ function initPorts(app, apiEndpoint, tilesEndpoint, initialPermalink) {
 
     map_fg.on("load", () => {
       RailViz.Path.Base.init(map_fg, apiEndpoint);
-      RailViz.GBFS.init(map_fg, apiEndpoint);
 
       map_fg.addLayer(new RailVizCustomLayer());
 
@@ -354,7 +352,5 @@ function initPorts(app, apiEndpoint, tilesEndpoint, initialPermalink) {
     );
     app.ports.mapShowTrains.subscribe(RailViz.Main.showTrains);
     app.ports.mapSetLocale.subscribe(RailViz.Markers.setLocale);
-
-    app.ports.setGBFSSearchOptions.subscribe(RailViz.GBFS.updateLayers);
   });
 }

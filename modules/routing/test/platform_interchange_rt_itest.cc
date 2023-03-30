@@ -88,6 +88,10 @@ TEST_F(platform_interchange_rt1_test, track_change1) {
   EXPECT_EQ(unix_time(1425), s3.arrival_.schedule_timestamp_);
 
   ASSERT_EQ(2, j.transports_.size());
+  auto const& t0 = j.transports_[0];
+  EXPECT_EQ(1, t0.train_nr_);
+  auto const& t1 = j.transports_[1];
+  EXPECT_EQ(3, t1.train_nr_);
 }
 
 struct platform_interchange_rt2_test
@@ -127,6 +131,10 @@ TEST_F(platform_interchange_rt2_test, track_change1) {
     EXPECT_EQ(unix_time(1420), s3.arrival_.schedule_timestamp_);
 
     ASSERT_EQ(2, j.transports_.size());
+    auto const& t0 = j.transports_[0];
+    EXPECT_EQ(4, t0.train_nr_);
+    auto const& t1 = j.transports_[1];
+    EXPECT_EQ(2, t1.train_nr_);
   }
 
   {
@@ -152,6 +160,10 @@ TEST_F(platform_interchange_rt2_test, track_change1) {
     EXPECT_EQ(unix_time(1425), s3.arrival_.schedule_timestamp_);
 
     ASSERT_EQ(2, j.transports_.size());
+    auto const& t0 = j.transports_[0];
+    EXPECT_EQ(1, t0.train_nr_);
+    auto const& t1 = j.transports_[1];
+    EXPECT_EQ(3, t1.train_nr_);
   }
 }
 

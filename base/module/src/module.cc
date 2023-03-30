@@ -1,10 +1,12 @@
 #include "motis/module/module.h"
 
+#include "boost/filesystem.hpp"
+
 #include "motis/core/schedule/schedule.h"
 
 #include "motis/module/dispatcher.h"
 
-namespace fs = std::filesystem;
+namespace fs = boost::filesystem;
 
 namespace motis::module {
 

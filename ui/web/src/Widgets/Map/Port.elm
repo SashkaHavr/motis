@@ -22,8 +22,8 @@ port module Widgets.Map.Port exposing
     , mapFlyTo
     , mapHighlightConnections
     , mapInit
-    , mapSetConnections
     , mapSetDetailFilter
+    , mapSetConnections
     , mapSetLocale
     , mapSetMarkers
     , mapSetTooltip
@@ -103,7 +103,6 @@ type alias RVConnectionSegmentTrip =
     , d_station_id : String
     , a_station_id : String
     }
-
 
 type alias RVConnectionSegmentWalk =
     { connectionIds : List Int

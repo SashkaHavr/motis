@@ -5,7 +5,7 @@
 #include "utl/enumerate.h"
 #include "utl/verify.h"
 
-#include "motis/paxmon/loader/motis_journeys/journey_access.h"
+#include "motis/paxmon/loader/journeys/journey_access.h"
 
 namespace motis::paxmon::output {
 
@@ -68,6 +68,7 @@ journey_converter::journey_converter(const std::string& output_path)
           << "to"
           << "enter"
           << "exit"
+          << "category"
           << "train_nr"
           << "passengers" << end_row;
 }
@@ -80,12 +81,13 @@ void journey_converter::write_journey(const journey& j,
   for_each_leg(
       j,
       [&](journey::stop const& enter_stop, journey::stop const& exit_stop,
-          extern_trip const& et, journey::transport const*) {
+          extern_trip const& et, journey::transport const* transport) {
         writer_ << primary_id << secondary_id << ++leg_idx << "TRIP"
                 << enter_stop.eva_no_ << exit_stop.eva_no_
                 << enter_stop.departure_.schedule_timestamp_
-                << exit_stop.arrival_.schedule_timestamp_ << et.train_nr_ << pax
-                << end_row;
+                << exit_stop.arrival_.schedule_timestamp_
+                << (transport != nullptr ? transport->category_name_ : "")
+                << et.train_nr_ << pax << end_row;
       },
       [&](journey::stop const& walk_from_stop,
           journey::stop const& walk_to_stop) {

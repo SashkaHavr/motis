@@ -10,7 +10,6 @@ module Widgets.Routing exposing
     )
 
 import Data.Connection.Types exposing (Connection, Position, Station, TripId)
-import Data.GBFSInfo.Types exposing (GBFSInfo)
 import Data.Intermodal.Request as IntermodalRoutingRequest exposing (IntermodalLocation(..))
 import Data.Intermodal.Types as Intermodal exposing (IntermodalRoutingRequest)
 import Data.PPR.Request exposing (encodeSearchOptions)
@@ -20,14 +19,12 @@ import Data.Routing.Types exposing (SearchDirection(..))
 import Data.ScheduleInfo.Types exposing (ScheduleInfo)
 import Date exposing (Date)
 import Debounce
-import Dict
 import Dom.Scroll as Scroll
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Html.Lazy exposing (..)
 import Json.Decode as Decode
-import Json.Encode as Encode
 import Localization.Base exposing (..)
 import Maybe.Extra exposing (isJust)
 import Navigation exposing (Location)
@@ -159,8 +156,6 @@ type Msg
     | Deb (Debounce.Msg Msg)
     | SetRoutingResponses (List ( String, String ))
     | NavigateTo Route
-    | GBFSInfoError ApiError
-    | GBFSInfoResponse GBFSInfo
     | ScheduleInfoError ApiError
     | ScheduleInfoResponse ScheduleInfo
     | SetSearchTime Date
@@ -329,17 +324,6 @@ update msg model =
         NavigateTo route ->
             model ! [ Navigation.newUrl (toUrl route) ]
 
-        GBFSInfoError err ->
-            ( model, Cmd.none )
-
-        GBFSInfoResponse i ->
-            { model
-                | fromModes = ModePicker.update (ModePicker.UpdateGBFSInfo i) model.fromModes
-                , toModes = ModePicker.update (ModePicker.UpdateGBFSInfo i) model.toModes
-            }
-                ! []
-                |> checkRoutingRequest
-
         ScheduleInfoError err ->
             let
                 ( connections_, _ ) =
@@ -499,36 +483,10 @@ checkRoutingRequest ( model, cmds ) =
               , getCombinedSearchProfile model
                     |> encodeSearchOptions
                     |> Port.setPPRSearchOptions
-              , getGBFSOptions model
-                    |> encodeGBFSOptions
-                    |> Port.setGBFSSearchOptions
               ]
 
     else
         ( model, cmds )
-
-
-encodeGBFSOptions : List ModePicker.GBFS -> Encode.Value
-encodeGBFSOptions opt =
-    let
-        encodeGBFS gbfs =
-            Encode.object
-                [ "tag" => Encode.string gbfs.tag
-                , "name" => Encode.string gbfs.name
-                , "walk_max_duration" => Encode.int gbfs.walkMaxDuration
-                , "vehicle_max_duration" => Encode.int gbfs.vehicleMaxDuration
-                , "enabled" => Encode.bool gbfs.enabled
-                ]
-    in
-    opt |> List.map encodeGBFS |> Encode.list
-
-
-getGBFSOptions : Model -> List ModePicker.GBFS
-getGBFSOptions model =
-    Dict.union
-        (model.fromModes.gbfs |> Dict.filter (\k v -> v.enabled))
-        (model.toModes.gbfs |> Dict.filter (\k v -> v.enabled))
-        |> Dict.values
 
 
 getCombinedSearchProfile : Model -> SearchOptions
@@ -554,26 +512,19 @@ getCombinedSearchProfile model =
 checkTypeaheadUpdate : Typeahead.Msg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
 checkTypeaheadUpdate msg ( model, cmds ) =
     let
-        ( model_, connCmd ) =
+        model_ =
             case msg of
                 Typeahead.StationSuggestionsError err ->
                     let
-                        ( m, connCmd ) =
+                        ( m, _ ) =
                             Connections.update (Connections.SetError err) model.connections
                     in
-                    ( { model | connections = m }, Cmd.map ConnectionsUpdate connCmd )
-
-                Typeahead.Empty ->
-                    let
-                        ( m, connCmd ) =
-                            Connections.update Connections.ResetAll model.connections
-                    in
-                    ( { model | connections = m }, Cmd.map ConnectionsUpdate connCmd )
+                    { model | connections = m }
 
                 _ ->
-                    ( model, Cmd.none )
+                    model
     in
-    checkRoutingRequest ( model_, Cmd.batch [ cmds, setMapMarkers model_, connCmd ] )
+    checkRoutingRequest ( model_, Cmd.batch [ cmds, setMapMarkers model_ ] )
 
 
 setMapMarkers : Model -> Cmd msg
@@ -594,6 +545,7 @@ setMapMarkers model =
         destinationName =
             Typeahead.getSelectedSuggestion model.toLocation
                 |> Maybe.map Typeahead.getSuggestionName
+
     in
     RailViz.setMapMarkers startPosition destinationPosition startName destinationName
 

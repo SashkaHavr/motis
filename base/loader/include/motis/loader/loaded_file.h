@@ -4,6 +4,7 @@
 
 #include "utl/parser/buffer.h"
 #include "utl/parser/cstr.h"
+#include "utl/parser/file.h"
 
 namespace motis::loader {
 

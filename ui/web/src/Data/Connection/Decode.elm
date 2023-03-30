@@ -91,7 +91,9 @@ decodeTransportInfo : Decode.Decoder TransportInfo
 decodeTransportInfo =
     decode TransportInfo
         |> required "range" decodeRange
+        |> required "category_name" string
         |> optional "clasz" int 0
+        |> optional "train_nr" (nullable int) Nothing
         |> required "line_id" string
         |> required "name" string
         |> required "provider" string

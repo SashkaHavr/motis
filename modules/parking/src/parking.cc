@@ -1,10 +1,11 @@
 #include "motis/parking/parking.h"
 
 #include <cmath>
-#include <filesystem>
 #include <limits>
 #include <map>
 #include <string>
+
+#include "boost/filesystem.hpp"
 
 #include "utl/get_or_create.h"
 #include "utl/progress_tracker.h"
@@ -41,7 +42,7 @@ using namespace motis::osrm;
 using namespace motis::ppr;
 using namespace flatbuffers;
 
-namespace fs = std::filesystem;
+namespace fs = boost::filesystem;
 
 namespace motis::parking {
 
@@ -197,9 +198,13 @@ struct parking::impl {
   void init(dispatcher& d) {
     update_ppr_profiles();
     if (!parkendd_endpoints_.empty()) {
-      d.register_timer("ParkenDD Update",
-                       boost::posix_time::seconds{parkendd_update_interval_},
-                       [this]() { update_parkendd(); }, {kScheduleReadAccess});
+      d.register_timer(
+          "ParkenDD Update",
+          boost::posix_time::seconds{parkendd_update_interval_},
+          [this]() { update_parkendd(); },
+          ctx::accesses_t{ctx::access_request{
+              to_res_id(::motis::module::global_res_id::SCHEDULE),
+              ctx::access_t::READ}});
     }
   }
 
@@ -542,17 +547,15 @@ void parking::init(motis::module::registry& reg) {
         parkendd_update_interval_, ppr_profiles_, *stations_, ppr_exact_);
 
     reg.register_op("/parking/geo",
-                    [this](auto&& m) { return impl_->geo_lookup(m); }, {});
+                    [this](auto&& m) { return impl_->geo_lookup(m); });
     reg.register_op("/parking/lookup",
-                    [this](auto&& m) { return impl_->id_lookup(m); }, {});
+                    [this](auto&& m) { return impl_->id_lookup(m); });
     reg.register_op("/parking/edge",
-                    [this](auto&& m) { return impl_->parking_edge(m); }, {});
-    reg.register_op(
-        "/parking/edges",
-        [this](auto&& m) { return impl_->parking_edges_req(m, get_sched()); },
-        {kScheduleReadAccess});
-    reg.subscribe("/init", [this]() { impl_->init(*shared_data_); },
-                  {kScheduleReadAccess});
+                    [this](auto&& m) { return impl_->parking_edge(m); });
+    reg.register_op("/parking/edges", [this](auto&& m) {
+      return impl_->parking_edges_req(m, get_sched());
+    });
+    reg.subscribe("/init", [this]() { impl_->init(*shared_data_); });
   } catch (std::exception const& e) {
     LOG(logging::warn) << "parking module not initialized (" << e.what() << ")";
   }

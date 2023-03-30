@@ -9,19 +9,22 @@
 #include "motis/module/message.h"
 
 #include "motis/paxmon/capacity_data.h"
-#include "motis/paxmon/index_types.h"
+#include "motis/paxmon/capacity_maps.h"
 #include "motis/paxmon/statistics.h"
 #include "motis/paxmon/universe.h"
 
 namespace motis::paxmon {
 
-trip_data_index get_or_add_trip(schedule const& sched, universe& uv,
+trip_data_index get_or_add_trip(schedule const& sched,
+                                capacity_maps const& caps, universe& uv,
                                 trip_idx_t trip_idx);
 
-trip_data_index get_or_add_trip(schedule const& sched, universe& uv,
+trip_data_index get_or_add_trip(schedule const& sched,
+                                capacity_maps const& caps, universe& uv,
                                 trip const* trp);
 
-trip_data_index get_or_add_trip(schedule const& sched, universe& uv,
+trip_data_index get_or_add_trip(schedule const& sched,
+                                capacity_maps const& caps, universe& uv,
                                 extern_trip const& et);
 
 trip_data_index get_trip(universe const& uv, trip_idx_t trip_idx);
@@ -30,8 +33,8 @@ void update_event_times(schedule const& sched, universe& uv,
                         motis::rt::RtDelayUpdate const* du,
                         std::vector<edge_index>& updated_interchange_edges);
 
-void update_trip_route(schedule const& sched, universe& uv,
-                       motis::rt::RtRerouteUpdate const* ru,
+void update_trip_route(schedule const& sched, capacity_maps const& caps,
+                       universe& uv, motis::rt::RtRerouteUpdate const* ru,
                        std::vector<edge_index>& updated_interchange_edges);
 
 inline edge* add_edge(universe& uv, edge&& e) {
@@ -80,29 +83,17 @@ inline edge make_through_edge(universe& uv, event_node_index from,
               uv.pax_connection_info_.insert()};
 }
 
-bool add_group_route_to_edge(universe& uv, schedule const& sched, edge* e,
-                             passenger_group_with_route const& entry, bool log,
-                             pci_log_reason_t reason);
-
-bool remove_group_route_from_edge(universe& uv, schedule const& sched, edge* e,
-                                  passenger_group_with_route const& entry,
-                                  bool log, pci_log_reason_t reason);
-
-bool add_broken_group_route_to_edge(universe& uv, schedule const& sched,
-                                    edge* e,
-                                    passenger_group_with_route const& entry,
-                                    bool log, pci_log_reason_t reason);
-
-bool remove_broken_group_route_from_edge(
-    universe& uv, schedule const& sched, edge* e,
-    passenger_group_with_route const& entry, bool log, pci_log_reason_t reason);
+void add_passenger_group_to_edge(universe& uv, edge* e, passenger_group* pg);
+void remove_passenger_group_from_edge(universe& uv, edge* e,
+                                      passenger_group* pg);
 
 void for_each_trip(
-    schedule const& sched, universe& uv, compact_journey const& journey,
+    schedule const& sched, capacity_maps const& caps, universe& uv,
+    compact_journey const& journey,
     std::function<void(journey_leg const&, trip_data_index)> const& fn);
 
-void for_each_edge(schedule const& sched, universe& uv,
-                   compact_journey const& journey,
+void for_each_edge(schedule const& sched, capacity_maps const& caps,
+                   universe& uv, compact_journey const& journey,
                    std::function<void(journey_leg const&, edge*)> const& fn);
 
 event_node* find_event_node(universe const& uv, trip_data_index tdi,

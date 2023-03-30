@@ -1,4 +1,3 @@
-#include <fstream>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -8,7 +7,6 @@
 #include "boost/asio/signal_set.hpp"
 #include "boost/filesystem.hpp"
 
-#include "utl/erase_if.h"
 #include "utl/parser/cstr.h"
 #include "utl/to_vec.h"
 
@@ -62,14 +60,6 @@ int main(int argc, char const** argv) {
   remote_settings remote_opt;
   launcher_settings launcher_opt;
 
-  // Disable nigiri module by default.
-  std::set<std::string> disabled_by_default{
-      "cc",     "csa",    "gbfs", "nigiri", "paxforecast", "paxmon",
-      "raptor", "revise", "ris",  "rt",     "tiles",       "tripbased"};
-  utl::erase_if(module_opt.modules_, [&](std::string const& m) {
-    return disabled_by_default.contains(m);
-  });
-
   std::vector<conf::configuration*> confs = {&server_opt,  &import_opt,
                                              &dataset_opt, &module_opt,
                                              &remote_opt,  &launcher_opt};
@@ -85,12 +75,6 @@ int main(int argc, char const** argv) {
     if (parser.help()) {
       std::cout << "\n\tMOTIS " << short_version() << "\n\n";
       reg.print_list();
-      if (auto const module_names = instance.module_names();
-          module_names.empty()) {
-        std::cout << "\nNo modules available.\n";
-      } else {
-        std::cout << "\nAvailable modules: " << module_names << "\n\n";
-      }
       parser.print_help(std::cout);
       return 0;
     } else if (parser.version()) {
@@ -99,6 +83,10 @@ int main(int argc, char const** argv) {
     }
 
     parser.read_configuration_file(false);
+
+    if (!launcher_opt.init_.empty()) {
+      launcher_opt.mode_ = launcher_settings::motis_mode_t::INIT;
+    }
 
     parser.print_used(std::cout);
   } catch (std::exception const& e) {
@@ -115,22 +103,6 @@ int main(int argc, char const** argv) {
     instance.init_modules(module_opt, launcher_opt.num_threads_);
     instance.init_remotes(remote_opt.get_remotes());
 
-    if (!launcher_opt.init_.empty()) {
-      if (launcher_opt.init_.starts_with(".") &&
-          std::filesystem::is_regular_file(launcher_opt.init_)) {
-        std::ifstream in{launcher_opt.init_};
-        std::string json;
-        while (!in.eof() && in.peek() != EOF) {
-          std::getline(in, json);
-          auto const res =
-              instance.call(make_msg(json), launcher_opt.num_threads_);
-          std::cout << res->to_json() << std::endl;
-        }
-      } else {
-        instance.call(launcher_opt.init_, launcher_opt.num_threads_);
-      }
-    }
-
     if (launcher_opt.mode_ == launcher_settings::motis_mode_t::SERVER) {
       boost::system::error_code ec;
       server.listen(server_opt.host_, server_opt.port_,
@@ -143,15 +115,23 @@ int main(int argc, char const** argv) {
         std::cout << "unable to start server: " << ec.message() << "\n";
         return 1;
       }
-    } else if (launcher_opt.mode_ == launcher_settings::motis_mode_t::INIT) {
-      return 0;
     }
   } catch (std::exception const& e) {
     std::cout << "\ninitialization error: " << e.what() << "\n";
     return 1;
-  } catch (...) {
-    std::cout << "\ninitialization error\n";
-    return 1;
+  }
+
+  if (launcher_opt.mode_ == launcher_settings::motis_mode_t::INIT) {
+    try {
+      instance.call(launcher_opt.init_, launcher_opt.num_threads_);
+      return 0;
+    } catch (std::exception const& e) {
+      std::cout << "\ninit error: " << e.what() << "\n";
+      return 1;
+    } catch (...) {
+      std::cout << "\ninit error\n";
+      return 1;
+    }
   }
 
   std::unique_ptr<boost::asio::deadline_timer> timer;

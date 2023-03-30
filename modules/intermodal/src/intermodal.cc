@@ -50,14 +50,13 @@ void intermodal::reg_subc(motis::module::subc_reg& r) {
 }
 
 void intermodal::init(motis::module::registry& r) {
-  r.register_op("/intermodal", [this](msg_ptr const& m) { return route(m); },
-                {kScheduleReadAccess});
+  r.register_op("/intermodal", [this](msg_ptr const& m) { return route(m); });
   if (router_.empty()) {
     router_ = "/routing";
   } else if (router_[0] != '/') {
     router_ = "/" + router_;
   }
-  r.subscribe("/init", [this]() { ppr_profiles_.update(); }, {});
+  r.subscribe("/init", [this]() { ppr_profiles_.update(); });
 }
 
 std::vector<Offset<Connection>> revise_connections(
@@ -167,7 +166,7 @@ journey::transport& get_transport(journey& j, unsigned const from,
 
 bool is_virtual_station(journey::stop const& s) {
   return s.name_ == STATION_START || s.name_ == STATION_END;
-}
+};
 
 void apply_parking_patches(journey& j, std::vector<parking_patch>& patches) {
   auto parking_idx = 0;
@@ -217,39 +216,45 @@ void apply_gbfs_patches(journey& j, std::vector<parking_patch>& patches) {
 
       auto& t = get_transport(j, p.from_, p.to_);
       auto str1 = split_transport(j, patches, t);
-      split_transport(j, patches, str1.second_transport_);
+      auto str2 = split_transport(j, patches, str1.second_transport_);
 
-      auto& s1 = j.stops_.at(p.from_ + 1);
-      s1.eva_no_ = s.from_station_id_;
-      s1.name_ = s.from_station_name_;
-      s1.lat_ = s.from_station_pos_.lat_;
-      s1.lng_ = s.from_station_pos_.lng_;
-      s1.arrival_.valid_ = true;
-      s1.arrival_.timestamp_ =
+      str1.parking_stop_ = j.stops_.at(p.from_ + 1);
+      str2.parking_stop_ = j.stops_.at(p.from_ + 2);
+      str1.first_transport_ = get_transport(j, p.from_, p.from_ + 1);
+      str1.second_transport_ = get_transport(j, p.from_ + 1, p.from_ + 2);
+      str2.first_transport_ = get_transport(j, p.from_ + 1, p.from_ + 2);
+      str2.second_transport_ = get_transport(j, p.from_ + 2, p.from_ + 3);
+
+      str1.parking_stop_.eva_no_ = s.from_station_id_;
+      str1.parking_stop_.name_ = s.from_station_name_;
+      str1.parking_stop_.lat_ = s.from_station_pos_.lat_;
+      str1.parking_stop_.lng_ = s.from_station_pos_.lng_;
+      str1.parking_stop_.arrival_.valid_ = true;
+      str1.parking_stop_.arrival_.timestamp_ =
           j.stops_[p.from_].departure_.timestamp_ + s.first_walk_duration_ * 60;
-      s1.arrival_.schedule_timestamp_ = s1.arrival_.timestamp_;
-      s1.arrival_.timestamp_reason_ =
+      str1.parking_stop_.arrival_.schedule_timestamp_ =
+          str1.parking_stop_.arrival_.timestamp_;
+      str1.parking_stop_.arrival_.timestamp_reason_ =
           j.stops_[p.from_].departure_.timestamp_reason_;
-      s1.departure_ = s1.arrival_;
+      str1.parking_stop_.departure_ = str1.parking_stop_.arrival_;
 
-      auto& s2 = j.stops_.at(p.from_ + 2);
-      s2.eva_no_ = s.to_station_id_;
-      s2.name_ = s.to_station_name_;
-      s2.lat_ = s.to_station_pos_.lat_;
-      s2.lng_ = s.to_station_pos_.lng_;
-      s2.arrival_.valid_ = true;
-      s2.arrival_.timestamp_ = s1.departure_.timestamp_ + s.bike_duration_ * 60;
-      s2.arrival_.schedule_timestamp_ = s2.arrival_.timestamp_;
-      s2.arrival_.timestamp_reason_ =
+      str2.parking_stop_.eva_no_ = s.to_station_id_;
+      str2.parking_stop_.name_ = s.to_station_name_;
+      str2.parking_stop_.lat_ = s.to_station_pos_.lat_;
+      str2.parking_stop_.lng_ = s.to_station_pos_.lng_;
+      str2.parking_stop_.arrival_.valid_ = true;
+      str2.parking_stop_.arrival_.timestamp_ =
+          str1.parking_stop_.departure_.timestamp_ + s.bike_duration_ * 60;
+      str2.parking_stop_.arrival_.schedule_timestamp_ =
+          str2.parking_stop_.arrival_.timestamp_;
+      str2.parking_stop_.arrival_.timestamp_reason_ =
           j.stops_[p.from_ + 1].departure_.timestamp_reason_;
-      s2.departure_ = s2.arrival_;
+      str2.parking_stop_.departure_ = str2.parking_stop_.arrival_;
 
-      get_transport(j, p.from_, p.from_ + 1).mumo_type_ =
-          to_string(mumo_type::FOOT);
-      get_transport(j, p.from_ + 1, p.from_ + 2).mumo_type_ =
-          p.e_->gbfs_->vehicle_type_;
-      get_transport(j, p.from_ + 2, p.from_ + 3).mumo_type_ =
-          to_string(mumo_type::FOOT);
+      str1.first_transport_.mumo_type_ = to_string(mumo_type::FOOT);
+      str1.second_transport_.mumo_type_ = to_string(mumo_type::BIKE);
+      str2.first_transport_.mumo_type_ = to_string(mumo_type::BIKE);
+      str2.second_transport_.mumo_type_ = to_string(mumo_type::FOOT);
     }
 
     // free bike:
@@ -269,9 +274,9 @@ void apply_gbfs_patches(journey& j, std::vector<parking_patch>& patches) {
       str.parking_stop_.lng_ = b.pos_.lng_;
       str.parking_stop_.arrival_.valid_ = true;
       str.parking_stop_.arrival_.timestamp_ =
-          j.stops_[p.from_].departure_.timestamp_ + b.walk_duration_ * 60;
+          j.stops_[p.from_].departure_.timestamp_ + b.walk_duration_;
       str.parking_stop_.arrival_.schedule_timestamp_ =
-          str.parking_stop_.arrival_.timestamp_;
+          j.stops_[p.from_].departure_.schedule_timestamp_ + b.bike_duration_;
       str.parking_stop_.arrival_.timestamp_reason_ =
           j.stops_[p.from_].departure_.timestamp_reason_;
       str.parking_stop_.departure_ = str.parking_stop_.arrival_;
@@ -291,21 +296,8 @@ msg_ptr postprocess_response(msg_ptr const& response_msg,
                              std::vector<stats_category> const& mumo_stats,
                              ppr_profiles const& profiles) {
   auto const dir = req->search_dir();
-  auto routing_response =
-      response_msg ? motis_content(RoutingResponse, response_msg) : nullptr;
-  auto journeys = routing_response == nullptr
-                      ? std::vector<journey>{}
-                      : message_to_journeys(routing_response);
-
-  MOTIS_START_TIMING(direct_connection_timing);
-  auto const direct =
-      get_direct_connections(q_start, q_dest, req, profiles, edge_mapping);
-  stats.dominated_by_direct_connection_ =
-      remove_dominated_journeys(journeys, direct);
-  add_direct_connections(journeys, direct, q_start, q_dest, req);
-  MOTIS_STOP_TIMING(direct_connection_timing);
-  stats.direct_connection_duration_ =
-      static_cast<uint64_t>(MOTIS_TIMING_MS(direct_connection_timing));
+  auto routing_response = motis_content(RoutingResponse, response_msg);
+  auto journeys = message_to_journeys(routing_response);
 
   message_creator mc;
   for (auto& journey : journeys) {
@@ -351,6 +343,15 @@ msg_ptr postprocess_response(msg_ptr const& response_msg,
     apply_gbfs_patches(journey, gbfs_patches);
   }
 
+  MOTIS_START_TIMING(direct_connection_timing);
+  auto const direct = get_direct_connections(q_start, q_dest, req, profiles);
+  stats.dominated_by_direct_connection_ =
+      remove_dominated_journeys(journeys, direct);
+  add_direct_connections(journeys, direct, q_start, q_dest, req);
+  MOTIS_STOP_TIMING(direct_connection_timing);
+  stats.direct_connection_duration_ =
+      static_cast<uint64_t>(MOTIS_TIMING_MS(direct_connection_timing));
+
   utl::erase_if(journeys, [](journey const& j) { return j.stops_.empty(); });
   std::sort(
       begin(journeys), end(journeys), [](journey const& a, journey const& b) {
@@ -365,76 +366,45 @@ msg_ptr postprocess_response(msg_ptr const& response_msg,
                                : utl::to_vec(journeys, [&mc](journey const& j) {
                                    return to_connection(mc, j);
                                  });
-  auto all_stats =
-      routing_response == nullptr
-          ? std::vector<Offset<Statistics>>{}
-          : utl::to_vec(*routing_response->statistics(),
-                        [&](Statistics const* stats) {
-                          return motis_copy_table(Statistics, mc, stats);
-                        });
+  auto all_stats = utl::to_vec(*routing_response->statistics(),
+                               [&](Statistics const* stats) {
+                                 return motis_copy_table(Statistics, mc, stats);
+                               });
   for (auto const& s : mumo_stats) {
     all_stats.emplace_back(to_fbs(mc, s));
   }
   all_stats.emplace_back(to_fbs(mc, to_stats_category("intermodal", stats)));
-
-  auto interval_begin = uint64_t{};
-  auto interval_end = uint64_t{};
-  if (routing_response != nullptr) {
-    interval_begin = routing_response->interval_begin();
-    interval_end = routing_response->interval_end();
-  } else {
-    switch (req->start_type()) {
-      case IntermodalStart_PretripStart:
-        interval_begin =
-            reinterpret_cast<IntermodalPretripStart const*>(req->start())
-                ->interval()
-                ->begin();
-        interval_end =
-            reinterpret_cast<IntermodalPretripStart const*>(req->start())
-                ->interval()
-                ->begin();
-        break;
-
-      case IntermodalStart_IntermodalPretripStart:
-        interval_begin = reinterpret_cast<PretripStart const*>(req->start())
-                             ->interval()
-                             ->begin();
-        interval_end = reinterpret_cast<PretripStart const*>(req->start())
-                           ->interval()
-                           ->begin();
-        break;
-
-      case IntermodalStart_IntermodalOntripStart:
-        interval_begin = interval_end =
-            reinterpret_cast<IntermodalOntripStart const*>(req->start())
-                ->departure_time();
-        break;
-
-      case IntermodalStart_OntripStationStart:
-        interval_begin = interval_end =
-            reinterpret_cast<OntripStationStart const*>(req->start())
-                ->departure_time();
-        break;
-
-      case IntermodalStart_OntripTrainStart:
-        interval_begin = interval_end =
-            reinterpret_cast<OntripTrainStart const*>(req->start())
-                ->arrival_time();
-        break;
-
-      case IntermodalStart_NONE: break;
-    }
-  }
-
   mc.create_and_finish(
       MsgContent_RoutingResponse,
       CreateRoutingResponse(
           mc, mc.CreateVectorOfSortedTables(&all_stats),
-          mc.CreateVector(connections), interval_begin, interval_end,
+          mc.CreateVector(connections), routing_response->interval_begin(),
+          routing_response->interval_end(),
           mc.CreateVector(utl::to_vec(
               direct,
               [&mc](direct_connection const& c) { return to_fbs(mc, c); })))
           .Union());
+
+  return make_msg(mc);
+}
+
+msg_ptr empty_response(statistics& stats, schedule const& sched) {
+  auto const schedule_begin = SCHEDULE_OFFSET_MINUTES;
+  auto const schedule_end =
+      static_cast<time>((sched.schedule_end_ - sched.schedule_begin_) / 60);
+  message_creator mc;
+  std::vector<Offset<Statistics>> all_stats{
+      to_fbs(mc, to_stats_category("intermodal", stats))};
+  mc.create_and_finish(
+      MsgContent_RoutingResponse,
+      CreateRoutingResponse(
+          mc, mc.CreateVectorOfSortedTables(&all_stats),
+          mc.CreateVector(std::vector<Offset<Connection>>{}),
+          motis_to_unixtime(sched, schedule_begin),
+          motis_to_unixtime(sched, schedule_end),
+          mc.CreateVector(std::vector<Offset<DirectConnection>>{}))
+          .Union());
+
   return make_msg(mc);
 }
 
@@ -476,7 +446,7 @@ msg_ptr intermodal::route(msg_ptr const& msg) {
     if (start.is_intermodal_) {
       futures.emplace_back(spawn_job_void([&]() {
         make_starts(
-            req, start.pos_, dest.pos_,
+            req, start.pos_,
             std::bind(appender, std::ref(deps),  // NOLINT
                       STATION_START, _1, start.pos_, _2, _3, _4, _5, _6),
             mumo_stats_appender, ppr_profiles_);
@@ -484,7 +454,7 @@ msg_ptr intermodal::route(msg_ptr const& msg) {
     }
     if (dest.is_intermodal_) {
       futures.emplace_back(spawn_job_void([&]() {
-        make_dests(req, dest.pos_, start.pos_,
+        make_dests(req, dest.pos_,
                    std::bind(appender, std::ref(arrs),  // NOLINT
                              _1, STATION_END, _2, dest.pos_, _3, _4, _5, _6),
                    mumo_stats_appender, ppr_profiles_);
@@ -494,7 +464,7 @@ msg_ptr intermodal::route(msg_ptr const& msg) {
     if (start.is_intermodal_) {
       futures.emplace_back(spawn_job_void([&]() {
         make_starts(
-            req, start.pos_, dest.pos_,
+            req, start.pos_,
             std::bind(appender, std::ref(deps),  // NOLINT
                       _1, STATION_START, _2, start.pos_, _3, _4, _5, _6),
             mumo_stats_appender, ppr_profiles_);
@@ -502,7 +472,7 @@ msg_ptr intermodal::route(msg_ptr const& msg) {
     }
     if (dest.is_intermodal_) {
       futures.emplace_back(spawn_job_void([&]() {
-        make_dests(req, dest.pos_, start.pos_,
+        make_dests(req, dest.pos_,
                    std::bind(appender, std::ref(arrs),  // NOLINT
                              STATION_END, _1, dest.pos_, _2, _3, _4, _5, _6),
                    mumo_stats_appender, ppr_profiles_);
@@ -518,40 +488,37 @@ msg_ptr intermodal::route(msg_ptr const& msg) {
   stats.mumo_edge_duration_ =
       static_cast<uint64_t>(MOTIS_TIMING_MS(mumo_edge_timing));
 
+  if ((start.is_intermodal_ && deps.empty()) ||
+      (dest.is_intermodal_ && arrs.empty())) {
+    return empty_response(stats, sched);
+  }
+
+  //  remove_intersection(deps, arrs, start.pos_, dest.pos_, req->search_dir());
   std::vector<mumo_edge const*> edge_mapping;
   auto edges = write_edges(mc, deps, arrs, edge_mapping);
 
-  auto routing_resp = msg_ptr{};
-  if ((!start.is_intermodal_ || !deps.empty()) &&
-      (!dest.is_intermodal_ || !arrs.empty())) {
-    auto const router =
-        req->router()->Length() == 0U
-            ? ((req->search_type() == SearchType_Default ||
-                req->search_type() == SearchType_Accessibility) &&
-               start.start_type_ != Start_OntripTrainStart)
-                  ? router_
-                  : "/routing"
-            : req->router()->str();
+  auto const router = ((req->search_type() == SearchType_Default ||
+                        req->search_type() == SearchType_Accessibility) &&
+                       start.start_type_ != Start_OntripTrainStart)
+                          ? router_
+                          : "/routing";
 
-    mc.create_and_finish(
-        MsgContent_RoutingRequest,
-        CreateRoutingRequest(mc, start.start_type_, start.start_, dest.station_,
-                             req->search_type(), req->search_dir(),
-                             mc.CreateVector(std::vector<Offset<Via>>{}),
-                             mc.CreateVector(edges))
-            .Union(),
-        router);
+  mc.create_and_finish(
+      MsgContent_RoutingRequest,
+      CreateRoutingRequest(mc, start.start_type_, start.start_, dest.station_,
+                           req->search_type(), req->search_dir(),
+                           mc.CreateVector(std::vector<Offset<Via>>{}),
+                           mc.CreateVector(edges))
+          .Union(),
+      router);
 
-    MOTIS_START_TIMING(routing_timing);
-    routing_resp = motis_call(make_msg(mc))->val();
-    MOTIS_STOP_TIMING(routing_timing);
-
-    stats.routing_duration_ =
-        static_cast<uint64_t>(MOTIS_TIMING_MS(routing_timing));
-  }
-
-  return postprocess_response(routing_resp, start, dest, req, edge_mapping,
-                              stats, revise_, mumo_stats, ppr_profiles_);
+  MOTIS_START_TIMING(routing_timing);
+  auto resp = motis_call(make_msg(mc))->val();
+  MOTIS_STOP_TIMING(routing_timing);
+  stats.routing_duration_ =
+      static_cast<uint64_t>(MOTIS_TIMING_MS(routing_timing));
+  return postprocess_response(resp, start, dest, req, edge_mapping, stats,
+                              revise_, mumo_stats, ppr_profiles_);
 }
 
 }  // namespace motis::intermodal

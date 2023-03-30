@@ -1,5 +1,4 @@
-// GENERATED FILE - DO NOT MODIFY
-// -> see /tools/protocol for information on how to update this file
+// generated file - do not modify - run update-protocol to update
 
 // ribasis/RiBasisFahrt.fbs
 export interface RiBasisMeta {

@@ -5,7 +5,7 @@
 #include "motis/core/common/logging.h"
 #include "motis/core/access/trip_access.h"
 
-#include "motis/paxmon/access/groups.h"
+#include "motis/paxmon/build_graph.h"
 #include "motis/paxmon/checks.h"
 #include "motis/paxmon/get_universe.h"
 #include "motis/paxmon/messages.h"
@@ -17,7 +17,8 @@ using namespace motis::logging;
 
 namespace motis::paxmon::api {
 
-msg_ptr remove_groups(paxmon_data& data, bool const check_graph_integrity_end,
+msg_ptr remove_groups(paxmon_data& data, bool const keep_group_history,
+                      bool const check_graph_integrity_end,
                       msg_ptr const& msg) {
   auto const req = motis_content(PaxMonRemoveGroupsRequest, msg);
   auto const uv_access =
@@ -32,7 +33,11 @@ msg_ptr remove_groups(paxmon_data& data, bool const check_graph_integrity_end,
       continue;
     }
     ++removed_groups;
-    remove_passenger_group(uv, sched, pg->id_, true, pci_log_reason_t::API);
+    uv.update_tracker_.before_group_removed(pg);
+    remove_passenger_group_from_graph(uv, pg);
+    if (!keep_group_history) {
+      uv.passenger_groups_.release(pg->id_);
+    }
   }
 
   LOG(info) << "remove_groups: " << removed_groups << " removed (universe "

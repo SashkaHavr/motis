@@ -23,6 +23,7 @@ module Data.Connection.Types exposing
     , getEventTime
     , hasNoProblems
     , interchanges
+    , transportCategories
     , transportsForRange
     , tripsForRange
     )
@@ -87,7 +88,9 @@ type Move
 
 type alias TransportInfo =
     { range : Range
+    , category_name : String
     , class : Int
+    , train_nr : Maybe Int
     , line_id : String
     , name : String
     , provider : String
@@ -214,8 +217,23 @@ tripsForRange connection from to =
                 Nothing
     in
     List.filterMap checkTrip connection.trips
-        |> List.sortBy (\t -> ( t.range.from, -t.range.to, t.id.train_nr ))
+        |> List.sortBy (\t -> (t.range.from, -t.range.to, t.id.train_nr))
         |> List.map .id
+
+
+transportCategories : Connection -> Set String
+transportCategories connection =
+    let
+        category : Move -> Maybe String
+        category move =
+            case move of
+                Transport t ->
+                    Just t.category_name
+
+                Walk _ ->
+                    Nothing
+    in
+    List.filterMap category connection.transports |> Set.fromList
 
 
 getEventTime : EventInfo -> Maybe Date

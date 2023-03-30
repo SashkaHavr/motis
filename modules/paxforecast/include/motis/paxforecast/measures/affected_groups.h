@@ -5,7 +5,6 @@
 
 #include "motis/core/schedule/schedule.h"
 
-#include "motis/paxmon/index_types.h"
 #include "motis/paxmon/localization.h"
 #include "motis/paxmon/passenger_group.h"
 #include "motis/paxmon/universe.h"
@@ -15,10 +14,9 @@
 namespace motis::paxforecast::measures {
 
 struct affected_groups_info {
-  mcd::hash_map<paxmon::passenger_group_with_route,
-                paxmon::passenger_localization>
+  mcd::hash_map<paxmon::passenger_group const*, paxmon::passenger_localization>
       localization_;
-  mcd::hash_map<paxmon::passenger_group_with_route,
+  mcd::hash_map<paxmon::passenger_group const*,
                 mcd::vector<measure_variant const*>>
       measures_;
 };

@@ -37,16 +37,12 @@ std::map<stop_pair, transfer> read_transfers(loaded_file f,
         transfers.insert(std::make_pair(
             std::pair{stops.at(get<from_stop_id>(t).to_str()).get(),
                       stops.at(get<to_stop_id>(t).to_str()).get()},
-            transfer(get<transfer_type>(t) == transfer::MIN_TRANSFER_TIME
-                         ? get<min_transfer_time>(t) / 60
-                         : 0,
-                     get<transfer_type>(t))));
+            transfer(get<min_transfer_time>(t) / 60, get<transfer_type>(t))));
       }
-    } catch (std::exception const& e) {
+    } catch (...) {
       LOG(logging::warn) << "skipping transfer (" << f.name() << ":" << i
-                         << ") between stop pair "
-                         << get<from_stop_id>(t).to_str() << " - "
-                         << get<to_stop_id>(t).to_str() << ": " << e.what();
+                         << ") between unknown stop pair "
+                         << get<from_stop_id>(t) << " - " << get<to_stop_id>(t);
     }
   }
   return transfers;

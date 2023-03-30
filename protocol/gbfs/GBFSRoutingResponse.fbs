@@ -42,13 +42,9 @@ table StationBikeRoute {
 // ----------------------------------------------------------------------------
 union BikeRoute { FreeBikeRoute, StationBikeRoute }
 
-table Direct { pos: Position; }
-
-union P { Station, Direct }
-
 table RouteInfo {
   vehicle_type: string;
-  p: P;
+  station: Station;  // public transport station
   route: BikeRoute;
   total_duration: uint;
 }

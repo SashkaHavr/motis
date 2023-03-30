@@ -1,6 +1,3 @@
-#include <iterator>
-#include <vector>
-
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -113,54 +110,6 @@ TEST(dynamic_fws_multimap_test, int_1) {
   EXPECT_EQ(2, mm[0].size());
   EXPECT_THAT(mm[1], ElementsAreArray({4, 8, 15, 16}));
   EXPECT_EQ(4, mm[1].size());
-
-  // begin / end
-  EXPECT_THAT(std::vector<int>(mm[0].begin(), mm[0].end()),
-              ElementsAreArray({42, 23}));
-  EXPECT_THAT(std::vector<int>(mm[1].begin(), mm[1].end()),
-              ElementsAreArray({4, 8, 15, 16}));
-  EXPECT_THAT(std::vector<int>(std::begin(mm[0]), std::end(mm[0])),
-              ElementsAreArray({42, 23}));
-  EXPECT_THAT(std::vector<int>(std::begin(mm[1]), std::end(mm[1])),
-              ElementsAreArray({4, 8, 15, 16}));
-  EXPECT_THAT(std::vector<int>(begin(mm[0]), end(mm[0])),
-              ElementsAreArray({42, 23}));
-  EXPECT_THAT(std::vector<int>(begin(mm[1]), end(mm[1])),
-              ElementsAreArray({4, 8, 15, 16}));
-
-  // cbegin / cend
-  EXPECT_THAT(std::vector<int>(mm[0].cbegin(), mm[0].cend()),
-              ElementsAreArray({42, 23}));
-  EXPECT_THAT(std::vector<int>(mm[1].cbegin(), mm[1].cend()),
-              ElementsAreArray({4, 8, 15, 16}));
-  EXPECT_THAT(std::vector<int>(std::cbegin(mm[0]), std::cend(mm[0])),
-              ElementsAreArray({42, 23}));
-  EXPECT_THAT(std::vector<int>(std::cbegin(mm[1]), std::cend(mm[1])),
-              ElementsAreArray({4, 8, 15, 16}));
-
-  // rbegin / rend
-  EXPECT_THAT(std::vector<int>(mm[0].rbegin(), mm[0].rend()),
-              ElementsAreArray({23, 42}));
-  EXPECT_THAT(std::vector<int>(mm[1].rbegin(), mm[1].rend()),
-              ElementsAreArray({16, 15, 8, 4}));
-  EXPECT_THAT(std::vector<int>(std::rbegin(mm[0]), std::rend(mm[0])),
-              ElementsAreArray({23, 42}));
-  EXPECT_THAT(std::vector<int>(std::rbegin(mm[1]), std::rend(mm[1])),
-              ElementsAreArray({16, 15, 8, 4}));
-  EXPECT_THAT(std::vector<int>(rbegin(mm[0]), rend(mm[0])),
-              ElementsAreArray({23, 42}));
-  EXPECT_THAT(std::vector<int>(rbegin(mm[1]), rend(mm[1])),
-              ElementsAreArray({16, 15, 8, 4}));
-
-  // crbegin / crend
-  EXPECT_THAT(std::vector<int>(mm[0].crbegin(), mm[0].crend()),
-              ElementsAreArray({23, 42}));
-  EXPECT_THAT(std::vector<int>(mm[1].crbegin(), mm[1].crend()),
-              ElementsAreArray({16, 15, 8, 4}));
-  EXPECT_THAT(std::vector<int>(std::crbegin(mm[0]), std::crend(mm[0])),
-              ElementsAreArray({23, 42}));
-  EXPECT_THAT(std::vector<int>(std::crbegin(mm[1]), std::crend(mm[1])),
-              ElementsAreArray({16, 15, 8, 4}));
 }
 
 TEST(dynamic_fws_multimap_test, graph_1) {
@@ -276,47 +225,6 @@ TEST(dynamic_fws_multimap_test, int_erase_2) {
   EXPECT_THAT(mm[0], ElementsAreArray({4, 8}));
   EXPECT_THAT(mm[1], ElementsAreArray({15, 16, 23, 42}));
   EXPECT_THAT(mm[2], ElementsAreArray({250, 350}));
-}
-
-TEST(dynamic_fws_multimap_test, int_erase_3) {
-  auto mm = build_test_map_1();
-
-  EXPECT_THAT(mm[1], ElementsAreArray({15, 16, 23, 42}));
-  auto const it1 = mm[1].erase(std::next(mm[1].begin(), 1));
-  ASSERT_EQ(it1, std::next(mm[1].begin(), 1));
-
-  ASSERT_EQ(3, mm.index_size());
-  EXPECT_EQ(11, mm.element_count());
-  EXPECT_THAT(mm[0], ElementsAreArray({4, 8}));
-  EXPECT_THAT(mm[1], ElementsAreArray({15, 23, 42}));
-  EXPECT_THAT(mm[2], ElementsAreArray({100, 200, 250, 300, 350, 400}));
-
-  auto const it2 = mm[2].erase(mm[2].begin());
-  ASSERT_EQ(it2, mm[2].begin());
-
-  ASSERT_EQ(3, mm.index_size());
-  EXPECT_EQ(10, mm.element_count());
-  EXPECT_THAT(mm[0], ElementsAreArray({4, 8}));
-  EXPECT_THAT(mm[1], ElementsAreArray({15, 23, 42}));
-  EXPECT_THAT(mm[2], ElementsAreArray({200, 250, 300, 350, 400}));
-
-  auto const it3 = mm[2].erase(std::next(mm[2].begin(), 4));
-  ASSERT_EQ(it3, mm[2].end());
-
-  ASSERT_EQ(3, mm.index_size());
-  EXPECT_EQ(9, mm.element_count());
-  EXPECT_THAT(mm[0], ElementsAreArray({4, 8}));
-  EXPECT_THAT(mm[1], ElementsAreArray({15, 23, 42}));
-  EXPECT_THAT(mm[2], ElementsAreArray({200, 250, 300, 350}));
-
-  auto const it4 = mm[2].erase(std::next(mm[2].begin(), 1));
-  ASSERT_EQ(it4, std::next(mm[2].begin(), 1));
-
-  ASSERT_EQ(3, mm.index_size());
-  EXPECT_EQ(8, mm.element_count());
-  EXPECT_THAT(mm[0], ElementsAreArray({4, 8}));
-  EXPECT_THAT(mm[1], ElementsAreArray({15, 23, 42}));
-  EXPECT_THAT(mm[2], ElementsAreArray({200, 300, 350}));
 }
 
 TEST(dynamic_fws_multimap_test, int_resize_1) {

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <limits>
 #include <optional>
@@ -14,7 +15,6 @@
 #include <immintrin.h>
 #endif
 
-#include "motis/array.h"
 #include "motis/vector.h"
 
 #include "cista/next_power_of_2.h"
@@ -44,8 +44,6 @@ struct dynamic_fws_multimap_base {
     using value_type = T;
     using iterator = typename mcd::vector<T>::iterator;
     using const_iterator = typename mcd::vector<T>::const_iterator;
-    using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
     template <bool IsConst = Const, typename = std::enable_if_t<IsConst>>
     // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
@@ -75,34 +73,10 @@ struct dynamic_fws_multimap_base {
     const_iterator cbegin() const { return begin(); }
     const_iterator cend() const { return end(); }
 
-    reverse_iterator rbegin() { return reverse_iterator(end()); }
-
-    const_reverse_iterator rbegin() const {
-      return const_reverse_iterator(end());
-    }
-
-    reverse_iterator rend() { return reverse_iterator(begin()); }
-
-    const_reverse_iterator rend() const {
-      return const_reverse_iterator(begin());
-    }
-
-    const_reverse_iterator crbegin() const {
-      return const_reverse_iterator(cend());
-    }
-
-    const_reverse_iterator crend() const {
-      return const_reverse_iterator(cbegin());
-    }
-
     friend iterator begin(bucket& b) { return b.begin(); }
     friend const_iterator begin(bucket const& b) { return b.begin(); }
     friend iterator end(bucket& b) { return b.end(); }
     friend const_iterator end(bucket const& b) { return b.end(); }
-    friend reverse_iterator rbegin(bucket& b) { return b.rbegin(); }
-    friend reverse_iterator rend(bucket& b) { return b.rend(); }
-    friend const_reverse_iterator rbegin(bucket const& b) { return b.rbegin(); }
-    friend const_reverse_iterator rend(bucket const& b) { return b.rend(); }
 
     T& operator[](size_type index) {
       return mutable_mm().data_[data_index(index)];
@@ -215,7 +189,6 @@ struct dynamic_fws_multimap_base {
 
     template <bool IsConst = Const, typename = std::enable_if_t<!IsConst>>
     iterator erase(iterator pos) {
-      auto const idx = std::distance(begin(), pos);
       auto last = std::prev(end());
       while (pos < last) {
         std::swap(*pos, *std::next(pos));
@@ -224,7 +197,7 @@ struct dynamic_fws_multimap_base {
       (*pos).~T();
       get_index().size_--;
       mutable_mm().element_count_--;
-      return idx < size() ? std::next(begin(), idx) : end();
+      return end();
     }
 
     template <bool IsConst = Const, typename = std::enable_if_t<!IsConst>>
@@ -621,7 +594,7 @@ protected:
 public:
   mcd::vector<index_type> index_;
   mcd::vector<T> data_;
-  mcd::array<mcd::vector<index_type>, Log2MaxEntriesPerBucket + 1>
+  std::array<mcd::vector<index_type>, Log2MaxEntriesPerBucket + 1>
       free_buckets_;
   size_type element_count_{};
 };

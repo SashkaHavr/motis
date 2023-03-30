@@ -76,9 +76,6 @@ public:
   }
 
   bool check_trip_path(trip const* trp, std::vector<station const*>& stations) {
-    if (trp == nullptr) {
-      return false;
-    }
     auto const stps = stops(trp);
     auto const trip_stops = std::vector<trip_stop>(begin(stps), end(stps));
     if (trip_stops.size() != stations.size()) {
@@ -94,9 +91,6 @@ public:
   }
 
   static void check_trip_times(trip const* trp) {
-    if (trp == nullptr) {
-      return;
-    }
     auto last_time = 0U;
     for (auto const& section : sections(trp)) {
       auto const& lc = section.lcon();

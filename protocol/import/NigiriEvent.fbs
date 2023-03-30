@@ -1,5 +1,0 @@
-namespace motis.import;
-
-table NigiriEvent {
-  // TODO
-}

@@ -29,7 +29,7 @@ jobs:
           git status --porcelain | xargs -I {} -0 test -z \"{}\"
 
   rsl-ui-checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     defaults:
       run:
         working-directory: ui/rsl
@@ -37,20 +37,18 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: pnpm Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v2
         with:
           path: ~/.pnpm-store
-          key: pnpm-${{ runner.os }}-${{ hashFiles('ui/rsl/pnpm-lock.yaml') }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             pnpm-${{ runner.os }}-
-
       - name: Install RSL Web Interface Dependencies
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v2.2.0
         with:
-          version: ^7.15.0
+          version: ^6.32.2
           run_install: |
             - cwd: ui/rsl
-
       - name: Formatting
         run: pnpm run format-check
 
@@ -60,52 +58,16 @@ jobs:
       - name: TypeScript
         run: pnpm run ts-check
 
-  api-docs:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: tools/protocol
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: pnpm Cache
-        uses: actions/cache@v3
-        with:
-          path: ~/.pnpm-store
-          key: pnpm-${{ runner.os }}-${{ hashFiles('tools/protocol/pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-${{ runner.os }}-
-
-      - name: Install Protocol Tool Dependencies
-        uses: pnpm/action-setup@v2
-        with:
-          version: ^7.15.0
-          run_install: |
-            - cwd: tools/protocol
-
-      - name: Run Protocol Tool
-        run: pnpm start --skip rsl-ui
-
-      - name: Upload API Docs
-        uses: actions/upload-artifact@v3
-        with:
-          name: api-docs
-          path: docs/generated/
-
   macos:
     runs-on: macos-latest
-    needs: api-docs
     strategy:
       fail-fast: false
       matrix:
         config:
           - preset: macos-x86_64
-            cache: macos-x86_64-avx
           - preset: macos-x86_64-noavx2
-            cache: macos-x86_64-noavx
             tests: On
           - preset: macos-arm64
-            cache: macos-arm64
     env:
       BUILDCACHE_COMPRESS: true
       BUILDCACHE_DIRECT_MODE: true
@@ -116,29 +78,25 @@ jobs:
       ASAN_OPTIONS: alloc_dealloc_mismatch=0
     steps:
       - uses: actions/checkout@v3
+      - uses: seanmiddleditch/gha-setup-ninja@master
 
-      # ==== RESTORE CACHE ====
-      - name: Restore buildcache Cache
-        uses: actions/cache/restore@v3
-        id: restore-buildcache
+      # ==== CACHE ====
+      - name: buildcache Cache
+        uses: actions/cache@v2
         with:
           path: ${{ github.workspace }}/.buildcache
-          key: buildcache-${{ matrix.config.cache }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-${{ hashFiles('**/*.cc') }}
+          key: buildcache-${{ matrix.config.name }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-${{ hashFiles('**/*.cc') }}
           restore-keys: |
-            buildcache-${{ matrix.config.cache }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-
-            buildcache-${{ matrix.config.cache }}-${{ hashFiles('.pkg') }}-
-            buildcache-${{ matrix.config.cache }}-
+            buildcache-${{ matrix.config.preset }}-${{ hashFiles('.pkg') }}-${{ hashFiles('**/*.h') }}-
+            buildcache-${{ matrix.config.preset }}-${{ hashFiles('.pkg') }}-
+            buildcache-${{ matrix.config.preset }}-
 
-      - name: Restore Dependencies Cache
-        uses: actions/cache/restore@v3
-        id: restore-deps-cache
+      - name: Dependencies Cache
+        uses: actions/cache@v2
         with:
           path: ${{ github.workspace }}/deps
           key: deps-${{ hashFiles('.pkg') }}
           restore-keys: deps-
-
-      - name: Install Ninja
-        run: brew install ninja
 
       # ==== BUILD ====
       - name: CMake
@@ -158,7 +116,6 @@ jobs:
             --import.paths schedule:base/loader/test_resources/hrd_schedules/single-ice \
             --dataset.begin 20151004 \
             --dataset.write_serialized false \
-            --nigiri.no_cache true \
             --ris.db_max_size 1048576 \
             --exclude_modules address osrm parking path ppr tiles tripbased gbfs
 
@@ -175,29 +132,23 @@ jobs:
         run: cmake --build build --target motis-web-ui || (sleep 10 && cmake --build build --target motis-web-ui)
 
       - name: pnpm Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v2
         with:
           path: ~/.pnpm-store
-          key: pnpm-${{ runner.os }}-${{ hashFiles('ui/rsl/pnpm-lock.yaml') }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             pnpm-${{ runner.os }}-
 
       - name: Install RSL Web Interface Dependencies
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v2.2.0
         with:
-          version: ^7.15.0
+          version: ^6.32.2
           run_install: |
             - cwd: ./ui/rsl
 
       - name: Compile RSL Web Interface
         run: pnpm run build
         working-directory: ./ui/rsl
-
-      - name: Download API Docs
-        uses: actions/download-artifact@v3
-        with:
-          name: api-docs
-          path: docs/generated
 
       # ==== DISTRIBUTION ====
       - name: Create Distribution
@@ -206,14 +157,11 @@ jobs:
           mkdir motis/web
           mv ui/web/{external_lib,img,js,style} motis/web/
           mv ui/web/{*.html,*.js,*.ico} motis/web/
-          mv ui/web/openapi motis/web/
           mv ui/rsl/dist motis/web/rsl
           mv build/motis motis/
           cp -r deps/osrm-backend/profiles motis/osrm-profiles
           cp -r deps/ppr/profiles motis/ppr-profiles
           cp -r deps/tiles/profile motis/tiles-profiles
-          cp docs/generated/openapi-3.1/openapi.yaml motis/web/openapi/openapi.yaml
-          cp docs/generated/openapi-3.0/openapi.yaml motis/web/openapi/openapi-3.0.yaml
           tar cjf motis-${{ matrix.config.preset }}.tar.bz2 motis
 
       - name: Upload Distribution
@@ -234,24 +182,8 @@ jobs:
           asset_name: motis-${{ matrix.config.preset }}.tar.bz2
           asset_content_type: application/x-tar
 
-      # ==== SAVE CACHE ====
-      - name: Save buildcache Cache
-        if: always()
-        uses: actions/cache/save@v3
-        with:
-          path: ${{ github.workspace }}/.buildcache
-          key: ${{ steps.restore-buildcache.outputs.cache-primary-key }}
-
-      - name: Save Dependencies Cache
-        if: always()
-        uses: actions/cache/save@v3
-        with:
-          path: ${{ github.workspace }}/deps
-          key: ${{ steps.restore-deps-cache.outputs.cache-primary-key }}
-
   linux:
     runs-on: [ self-hosted, linux, x64, '${{ matrix.config.preset }}' ]
-    needs: api-docs
     container:
       image: ghcr.io/motis-project/docker-cpp-build
       volumes:
@@ -281,7 +213,7 @@ jobs:
             skipui: true
           - preset: linux-debug
             skipui: true
-            emulator: valgrind --error-exitcode=1
+            emulator: valgrind
     env:
       BUILDCACHE_DIR: /buildcache
       BUILDCACHE_DIRECT_MODE: true
@@ -294,9 +226,7 @@ jobs:
         run: ln -s /deps deps
 
       - name: CMake
-        run: |
-          git config --global --add safe.directory `pwd`
-          cmake -G Ninja -S . -B build --preset=${{ matrix.config.preset }}
+        run: cmake -G Ninja -S . -B build --preset=${{ matrix.config.preset }}
 
       # ==== BUILD ====
       - name: Build
@@ -312,27 +242,28 @@ jobs:
             --import.paths schedule:base/loader/test_resources/hrd_schedules/single-ice \
             --dataset.begin 20151004 \
             --dataset.write_serialized false \
-            --nigiri.no_cache true \
             --ris.db_max_size 1048576 \
             --exclude_modules address osrm parking path ppr tiles tripbased gbfs
 
       - name: Run Tests
-        run: |
-          ${{ matrix.config.emulator }} build/motis-test & \
-          ${{ matrix.config.emulator }} build/motis-itest
+        run: ${{ matrix.config.emulator }} build/motis-test
+
+      - name: Run Integration Tests
+        run: ${{ matrix.config.emulator }} build/motis-itest
 
       # ==== WEB INTERFACE ====
       - name: Compile Web Interface
         if: ${{ !matrix.config.skipui }}
         run: |
-          ln -s /elm ui/web/elm-stuff
+          mkdir -p ui/web/elm-stuff
+          ln -s /elm ui/web/elm-stuff/packages
           cmake --build build --target motis-web-ui || (sleep 10 && cmake --build build --target motis-web-ui)
 
       - name: Install RSL Web Interface Dependencies
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v2.2.0
         if: ${{ !matrix.config.skipui }}
         with:
-          version: ^7.15.0
+          version: ^6.32.2
           run_install: |
             - cwd: ./ui/rsl
 
@@ -340,13 +271,6 @@ jobs:
         if: ${{ !matrix.config.skipui }}
         run: pnpm run build
         working-directory: ./ui/rsl
-
-      - name: Download API Docs
-        if: matrix.config.artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: api-docs
-          path: docs/generated
 
       # ==== DISTRIBUTION ====
       - name: Create Distribution
@@ -360,14 +284,11 @@ jobs:
           mv ui/web/*.html motis/web/
           mv ui/web/*.js motis/web/
           mv ui/web/*.ico motis/web/
-          mv ui/web/openapi motis/web/
           mv ui/rsl/dist motis/web/rsl
           mv build/motis motis/motis
           cp -r deps/osrm-backend/profiles motis/osrm-profiles
           cp -r deps/ppr/profiles motis/ppr-profiles
           cp -r deps/tiles/profile motis/tiles-profiles
-          cp docs/generated/openapi-3.1/openapi.yaml motis/web/openapi/openapi.yaml
-          cp docs/generated/openapi-3.0/openapi.yaml motis/web/openapi/openapi-3.0.yaml
           tar cjf motis-${{ matrix.config.artifact }}.tar.bz2 motis
 
       - name: Upload Distribution
@@ -425,7 +346,7 @@ jobs:
           ref: aachen
 
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
           name: motis-${{ matrix.config.artifact }}
 
@@ -460,15 +381,15 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
 
       - name: Docker setup-buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v1
         with:
           install: true
 
       - name: Docker Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v1
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -476,7 +397,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v3
         with:
           images: |
             ghcr.io/${{ github.repository }}
@@ -489,7 +410,7 @@ jobs:
             type=edge
 
       - name: Docker build and push
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v2
         with:
           push: true
           context: .

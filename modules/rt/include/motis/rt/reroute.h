@@ -1,20 +1,15 @@
 #pragma once
 
-#include <optional>
-
-#include "utl/erase.h"
 #include "utl/to_vec.h"
 
 #include "motis/core/schedule/build_platform_node.h"
 #include "motis/core/schedule/schedule.h"
 #include "motis/core/schedule/validate_graph.h"
-#include "motis/core/access/uuids.h"
 #include "motis/core/conv/event_type_conv.h"
 
 #include "motis/rt/build_route_node.h"
 #include "motis/rt/connection_builder.h"
 #include "motis/rt/event_resolver.h"
-#include "motis/rt/expanded_trips.h"
 #include "motis/rt/find_trip_fuzzy.h"
 #include "motis/rt/in_out_allowed.h"
 #include "motis/rt/incoming_edges.h"
@@ -311,71 +306,25 @@ inline std::set<station_node*> get_station_nodes(
   return station_nodes;
 }
 
-inline void update_delay_infos_and_event_uuids(
+inline void update_delay_infos(
     schedule& sched, std::vector<reroute_event>& events,
-    mcd::vector<trip::route_edge> const& trip_edges, trip const* trp) {
-  auto const update_event = [&](reroute_event& ev, ev_key const& new_ev) {
+    mcd::vector<trip::route_edge> const& trip_edges) {
+  auto const update_di = [&](reroute_event& ev, ev_key const& new_ev) {
     if (ev.di_ != nullptr) {
       ev.di_->set_ev_key(new_ev);
       sched.graph_to_delay_info_[new_ev] = ev.di_;
-    }
-    if (ev.k_) {
-      if (auto const maybe_uuid =
-              motis::access::get_event_uuid(sched, trp, ev.k_);
-          maybe_uuid.has_value()) {
-        auto const uuid = maybe_uuid.value();
-        auto const trip_and_new_ev_key =
-            mcd::pair{ptr<trip const>{trp}, new_ev};
-        sched.event_to_uuid_[trip_and_new_ev_key] = uuid;
-        sched.uuid_to_event_[uuid] = trip_and_new_ev_key;
-      }
     }
   };
 
   for (auto i = 0UL; i < events.size(); i += 2) {
     auto const e = trip_edges[i / 2].get_edge();
-    update_event(events[i], ev_key{e, 0, event_type::DEP});
-    update_event(events[i + 1], ev_key{e, 0, event_type::ARR});
+    update_di(events[i], ev_key{e, 0, event_type::DEP});
+    update_di(events[i + 1], ev_key{e, 0, event_type::ARR});
   }
-}
-
-inline void update_expanded_routes_map(schedule& sched, trip* trp,
-                                       std::optional<uint32_t> new_route_id,
-                                       update_msg_builder& update_builder) {
-  std::optional<expanded_trip_index> old_eti;
-  std::optional<expanded_trip_index> new_eti;
-
-  if (!trp->edges_->empty()) {
-    auto const old_route_id = trp->edges_->front()->from_->route_;
-    for (auto const old_exp_route_id :
-         sched.route_to_expanded_routes_.at(old_route_id)) {
-      auto exp_route = sched.expanded_trips_.at(old_exp_route_id);
-      if (auto it = std::find(begin(exp_route), end(exp_route), trp);
-          it != end(exp_route)) {
-        old_eti = {old_exp_route_id,
-                   static_cast<uint32_t>(std::distance(begin(exp_route), it))};
-        exp_route.erase(it);
-        if (exp_route.empty()) {
-          utl::erase(sched.route_to_expanded_routes_.at(old_route_id),
-                     old_exp_route_id);
-        }
-        break;
-      }
-    }
-  }
-  if (new_route_id.has_value()) {
-    new_eti = add_trip_to_new_expanded_route(sched, trp, *new_route_id);
-  }
-
-  update_builder.expanded_trip_moved(trp, old_eti, new_eti);
 }
 
 inline void update_trip(schedule& sched, trip* trp,
-                        mcd::vector<trip::route_edge> const& trip_edges,
-                        update_msg_builder& update_builder) {
-  update_expanded_routes_map(
-      sched, trp, static_cast<uint32_t>(trip_edges.front()->from_->route_),
-      update_builder);
+                        mcd::vector<trip::route_edge> const& trip_edges) {
   for (auto const& trp_e : *trp->edges_) {
     auto const e = trp_e.get_edge();
     e->m_.route_edge_.conns_[trp->lcon_idx_].valid_ = 0U;
@@ -399,27 +348,6 @@ inline void disable_trip(mcd::vector<trip::route_edge> const& edges,
                          int lcon_idx) {
   for (auto const& e : edges) {
     e->m_.route_edge_.conns_[lcon_idx].valid_ = 0U;
-  }
-}
-
-inline void disable_event_uuid(schedule& sched, trip const* trp,
-                               ev_key const& evk) {
-  if (auto const it =
-          sched.event_to_uuid_.find(mcd::pair{ptr<trip const>{trp}, evk});
-      it != end(sched.event_to_uuid_)) {
-    auto const uuid = it->second;
-    sched.event_to_uuid_.erase(it);
-    sched.uuid_to_event_.erase(uuid);
-  }
-}
-
-inline void disable_event_uuids(
-    schedule& sched, trip const* trp,
-    std::vector<boost::optional<ev_key>> const& del_evs) {
-  for (auto const& ev : del_evs) {
-    if (ev.has_value()) {
-      disable_event_uuid(sched, trp, ev.value());
-    }
   }
 }
 
@@ -456,8 +384,6 @@ inline std::pair<reroute_result, trip const*> reroute(
   add_additional_events(stats, sched, cancelled_delays, trp, additional, evs);
   add_not_deleted_trip_events(sched, del_evs, trp, evs);
   if (evs.empty()) {
-    disable_event_uuids(sched, trp, del_evs);
-    update_expanded_routes_map(sched, trp, {}, update_builder);
     disable_trip(*old_trip, old_lcon_idx);
     trp->edges_ =
         sched.trip_edges_
@@ -479,11 +405,10 @@ inline std::pair<reroute_result, trip const*> reroute(
 
   std::vector<incoming_edge_patch> incoming;
   save_outgoing_edges(station_nodes, incoming);
-  disable_event_uuids(sched, trp, del_evs);
   auto const trip_edges = build_route(sched, sections, incoming);
   patch_incoming_edges(incoming);
-  update_delay_infos_and_event_uuids(sched, evs, trip_edges, trp);
-  update_trip(sched, trp, trip_edges, update_builder);
+  update_delay_infos(sched, evs, trip_edges);
+  update_trip(sched, trp, trip_edges);
   store_cancelled_delays(sched, trp, del_evs, cancelled_delays, cancelled_evs);
   disable_trip(*old_trip, old_lcon_idx);
 

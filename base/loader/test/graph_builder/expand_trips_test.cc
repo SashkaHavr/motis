@@ -1,4 +1,3 @@
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 #include <algorithm>
@@ -17,8 +16,6 @@
 #include "./graph_builder_test.h"
 
 using namespace motis::access;
-
-using ::testing::Contains;
 
 namespace motis::loader {
 
@@ -65,9 +62,6 @@ public:
   }
 
   bool check_trip_path(trip const* trp, std::vector<station const*>& stations) {
-    if (trp == nullptr) {
-      return false;
-    }
     auto const stps = stops(trp);
     auto const trip_stops = std::vector<trip_stop>(begin(stps), end(stps));
     if (trip_stops.size() != stations.size()) {
@@ -95,25 +89,14 @@ TEST_F(expand_trips_test, check_expanded_trips) {
   auto const* i = get_station(*sched_, "0000009");
   auto const* j = get_station(*sched_, "0000010");
   auto const* k = get_station(*sched_, "0000011");
-  EXPECT_EQ(6, sched_->expanded_trips_.index_size());
-  EXPECT_EQ(6 * num_days_, sched_->expanded_trips_.element_count());
+  EXPECT_EQ(6, sched_->expanded_trips_.index_size() - 1);
+  EXPECT_EQ(6 * num_days_, sched_->expanded_trips_.data_size());
   EXPECT_EQ(num_days_, trip_count({b, c, d, f, h, j, k}));
   EXPECT_EQ(num_days_, trip_count({b, c, d, e, g, i}));
   EXPECT_EQ(num_days_, trip_count({b, c, d, e, j, k}));
   EXPECT_EQ(num_days_, trip_count({a, c, d, f, h, j, k}));
   EXPECT_EQ(num_days_, trip_count({a, c, d, e, g, i}));
   EXPECT_EQ(num_days_, trip_count({a, c, d, e, j, k}));
-}
-
-TEST_F(expand_trips_test, check_route_mapping) {
-  for (auto const exp_route : sched_->expanded_trips_) {
-    auto const exp_route_id = exp_route.index();
-    for (auto const& trp : exp_route) {
-      auto const graph_route_id = trip_stop{trp, 0}.get_route_node()->route_;
-      EXPECT_THAT(sched_->route_to_expanded_routes_.at(graph_route_id),
-                  Contains(exp_route_id));
-    }
-  }
 }
 
 }  // namespace motis::loader

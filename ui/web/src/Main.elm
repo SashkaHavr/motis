@@ -45,9 +45,6 @@ module Main exposing
     )
 
 import Data.Connection.Types exposing (Connection, Position, Station, TripId)
-import Data.GBFSInfo.Decode exposing (decodeGBFSInfoResponse)
-import Data.GBFSInfo.Request as GBFSInfo
-import Data.GBFSInfo.Types exposing (GBFSInfo)
 import Data.Journey.Types exposing (Journey, JourneyWalk, toJourney, walkFallbackPolyline)
 import Data.Lookup.Decode exposing (decodeTripToConnectionResponse)
 import Data.Lookup.Request exposing (encodeTripToConnection)
@@ -74,7 +71,6 @@ import Json.Encode
 import Localization.Base exposing (..)
 import Localization.De exposing (..)
 import Localization.En exposing (..)
-import Localization.Fr exposing (..)
 import Localization.Pl exposing (..)
 import Maybe.Extra exposing (isJust, isNothing, orElse)
 import Navigation exposing (Location)
@@ -205,7 +201,6 @@ init flags initialLocation =
           , Cmd.map TripSearchUpdate tripSearchCmd
           , Cmd.map SimTimePickerUpdate simTimePickerCmd
           , requestScheduleInfo remoteAddress
-          , requestGBFSInfo remoteAddress
           , Task.perform UpdateCurrentTime Time.now
           , cmd1
           , cmd2
@@ -232,8 +227,6 @@ type Msg
     | TripToConnectionError TripId ApiError
     | TripToConnectionResponse TripId Connection
     | ScheduleInfoError ApiError
-    | GBFSInfoError ApiError
-    | GBFSInfoResponse GBFSInfo
     | ScheduleInfoResponse ScheduleInfo
     | SetLocale Localization
     | NavigateTo Route
@@ -395,17 +388,6 @@ update msg model =
                 | scheduleInfo = Nothing
                 , routing = routingModel
             }
-                ! [ Cmd.map RoutingUpdate routingCmd ]
-
-        GBFSInfoError err ->
-            ( model, Cmd.none )
-
-        GBFSInfoResponse i ->
-            let
-                ( routingModel, routingCmd ) =
-                    Routing.update (Routing.GBFSInfoResponse i) model.routing
-            in
-            { model | routing = routingModel }
                 ! [ Cmd.map RoutingUpdate routingCmd ]
 
         ScheduleInfoResponse si ->
@@ -678,8 +660,7 @@ update msg model =
                         , overlayVisible = True
                     }
 
-                cmd1 =
-                    MapDetails.setDetailFilter Nothing
+                cmd1 = MapDetails.setDetailFilter Nothing
             in
             model1
                 ! [ cmd1
@@ -810,7 +791,7 @@ selectConnection model idx =
                 , stationEvents = Nothing
                 , subView = Nothing
             }
-                ! [ MapDetails.setDetailFilter (Just j)
+                ! [ MapDetails.setDetailFilter ( Just j )
                   , requestWalkRoutes model.apiEndpoint
                         (Routing.getStartSearchProfile model.routing)
                         (Routing.getDestinationSearchProfile model.routing)
@@ -1033,6 +1014,8 @@ setFullTripConnection model tripId connection =
                             )
             }
 
+
+
         ( tripDetails, _ ) =
             case model.tripDetails of
                 Just td ->
@@ -1045,7 +1028,7 @@ setFullTripConnection model tripId connection =
         | tripDetails = Just tripDetails
         , subView = Just TripDetailsView
     }
-        ! [ MapDetails.setDetailFilter (Just tripJourney)
+        ! [ MapDetails.setDetailFilter ( Just tripJourney )
           , Task.attempt noop <| Scroll.toTop "sub-overlay-content"
           , Task.attempt noop <| Scroll.toTop "sub-connection-journey"
           ]
@@ -1083,9 +1066,6 @@ getLocale language =
 
         "en" ->
             enLocalization
-
-        "fr" ->
-            frLocalization
 
         "pl" ->
             plLocalization
@@ -1370,16 +1350,6 @@ requestScheduleInfo remoteAddress =
         ScheduleInfo.request
 
 
-requestGBFSInfo : String -> Cmd Msg
-requestGBFSInfo remoteAddress =
-    Api.sendRequest
-        (remoteAddress ++ "?elm=GBFSInfo")
-        decodeGBFSInfoResponse
-        GBFSInfoError
-        GBFSInfoResponse
-        GBFSInfo.request
-
-
 sendTripRequest : String -> TripId -> Cmd Msg
 sendTripRequest remoteAddress tripId =
     Api.sendRequest
@@ -1495,8 +1465,7 @@ routeToMsg route =
 closeSelectedConnection : Model -> ( Model, Cmd Msg )
 closeSelectedConnection model =
     let
-        cmds =
-            MapDetails.setDetailFilter Nothing
+        cmds = MapDetails.setDetailFilter Nothing
     in
     { model
         | connectionDetails = Nothing
@@ -1513,8 +1482,7 @@ closeSelectedConnection model =
 closeSubOverlay : Model -> ( Model, Cmd Msg )
 closeSubOverlay model =
     let
-        cmds =
-            MapDetails.setDetailFilter Nothing
+        cmds = MapDetails.setDetailFilter Nothing
     in
     ( { model
         | tripDetails = Nothing

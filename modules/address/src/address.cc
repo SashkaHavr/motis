@@ -139,7 +139,7 @@ void address::import(motis::module::import_dispatcher& reg) {
                                         osm->hash(), osm->size()};
 
         if (read_ini<import_state>(dir / "import.ini") != state) {
-          std::filesystem::create_directories(dir);
+          boost::filesystem::create_directories(dir);
           std::ofstream out{db_file().c_str(), std::ios::binary};
           address_typeahead::extract(osm->path()->str(), out);
           write_ini(dir / "import.ini", state);
@@ -165,9 +165,9 @@ void address::init(motis::module::registry& reg) {
   address_typeahead::typeahead t{context};
 
   impl_ = std::make_unique<impl>(db_file());
-  reg.register_op(
-      "/address",
-      [this](msg_ptr const& msg) { return impl_->get_guesses(msg); }, {});
+  reg.register_op("/address", [this](msg_ptr const& msg) {
+    return impl_->get_guesses(msg);
+  });
 }
 
 }  // namespace motis::address

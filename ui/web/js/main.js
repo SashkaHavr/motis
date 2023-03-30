@@ -36,7 +36,7 @@
     let initialPermalink = parseInitialPermalink(mapConfig.initial_permalink);
 
     let simulationTime = null;
-    let timeParam = params.get("time");
+    let timeParam = params["time"] || null;
     if (timeParam) {
       simulationTime = parseTimestamp(timeParam);
     }
@@ -45,7 +45,7 @@
       simulationTime = initialPermalink.timestamp;
     }
 
-    let langParam = params.get("lang");
+    let langParam = params["lang"] || null;
     let language = langParam || "de";
 
     window.app = Elm.Main.embed(document.getElementById("app-container"), {
@@ -53,7 +53,7 @@
       currentTime: Date.now(),
       simulationTime: simulationTime,
       language: language,
-      motisParam: params.get("motis"),
+      motisParam: params["motis"] || null,
       timeParam: timeParam,
       langParam: langParam,
       fromLocation: localStorage.getItem("motis.routing.from_location"),
@@ -117,25 +117,30 @@ function localStorageSet(key, value) {
 }
 
 function getQueryParameters() {
-  return new URL(window.location.href).searchParams;
+  var params = {};
+  window.location.search
+    .substr(1)
+    .split("&")
+    .forEach((p) => {
+      var param = p.split("=");
+      params[param[0]] = decodeURIComponent(param[1]);
+    });
+  return params;
 }
 
 function getApiEndpoint(params) {
-  const defaultProtocol = window.location.protocol;
-  const defaultHost = window.location.hostname;
-  const defaultPort = "8080";
-  const motisParam = params.get("motis");
   let apiEndpoint = String(window.location.origin + window.location.pathname);
+  let motisParam = params["motis"] || null;
   if (motisParam) {
     if (/^[0-9]+$/.test(motisParam)) {
-      apiEndpoint = defaultProtocol + "//" + defaultHost + ":" + motisParam;
+      apiEndpoint = "https://" + defaultHost + ":" + motisParam;
     } else if (!motisParam.includes(":")) {
-      apiEndpoint = defaultProtocol + "//" + motisParam + ":" + defaultPort;
+      apiEndpoint = "https://" + motisParam + ":" + defaultPort;
     } else if (
       !motisParam.startsWith("http:") &&
       !motisParam.startsWith("https:")
     ) {
-      apiEndpoint = defaultProtocol + "//" + motisParam;
+      apiEndpoint = "https://" + motisParam;
     } else {
       apiEndpoint = motisParam;
     }

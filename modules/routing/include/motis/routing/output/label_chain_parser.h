@@ -15,10 +15,11 @@ constexpr auto MOTIS_UNKNOWN_TRACK = 0;
 
 namespace motis::routing::output {
 
-enum class state {
+enum state {
   AT_STATION,
   PRE_CONNECTION,
   IN_CONNECTION,
+  PRE_WALK,
   WALK,
   WALK_SKIP,
   BWD_WALK,
@@ -28,123 +29,107 @@ enum class state {
   ONTRIP_TRAIN_START
 };
 
-char const* state_to_str(state const s) {
-  constexpr char const* const strs[] = {"AT_STATION",
-                                        "PRE_CONNECTION",
-                                        "IN_CONNECTION",
-                                        "WALK",
-                                        "WALK_SKIP",
-                                        "BWD_WALK",
-                                        "BWD_WALK_SKIP",
-                                        "IN_CONNECTION_THROUGH",
-                                        "IN_CONNECTION_THROUGH_SKIP",
-                                        "ONTRIP_TRAIN_START"};
-  return strs[static_cast<std::underlying_type_t<state>>(s)];
-}
-
 template <typename Label>
 inline node* get_node(Label const& l) {
   return l.edge_->to_;
 }
 
 template <typename Label>
-state next_state(state const s, Label const* c, Label const* n) {
+state next_state(int s, Label const* c, Label const* n) {
   switch (s) {
-    case state::AT_STATION:
+    case AT_STATION:
       if (n && get_node(*n)->is_station_node()) {
-        return state::WALK;
+        return WALK;
       } else {
-        return state::PRE_CONNECTION;
+        return PRE_CONNECTION;
       }
-    case state::PRE_CONNECTION:
-    case state::IN_CONNECTION_THROUGH: return state::IN_CONNECTION;
-    case state::IN_CONNECTION_THROUGH_SKIP:
-      return get_node(*c)->is_foot_node() ? state::WALK : state::AT_STATION;
-    case state::IN_CONNECTION:
+    case PRE_CONNECTION:
+    case IN_CONNECTION_THROUGH: return IN_CONNECTION;
+    case IN_CONNECTION_THROUGH_SKIP:
+      return get_node(*c)->is_foot_node() ? WALK : AT_STATION;
+    case IN_CONNECTION:
       if (c->connection_ == nullptr) {
         if (n && get_node(*c)->type() == node_type::STATION_NODE &&
             get_node(*n)->type() == node_type::FOOT_NODE) {
           if (get_node(*c)->get_station() == get_node(*n)->get_station()) {
-            return state::WALK_SKIP;
+            return WALK_SKIP;
           } else {
-            return state::BWD_WALK;
+            return BWD_WALK;
           }
         }
 
         switch (get_node(*c)->type()) {
           case node_type::STATION_NODE:
-            return n && get_node(*n)->is_station_node() ? state::WALK
-                                                        : state::AT_STATION;
-          case node_type::FOOT_NODE: return state::WALK;
+            return n && get_node(*n)->is_station_node() ? WALK : AT_STATION;
+          case node_type::FOOT_NODE: return WALK;
           case node_type::ROUTE_NODE:
-            return get_node(*n)->is_route_node()
-                       ? state::IN_CONNECTION_THROUGH
-                       : state::IN_CONNECTION_THROUGH_SKIP;
-          case node_type::PLATFORM_NODE: return state::AT_STATION;
+            return get_node(*n)->is_route_node() ? IN_CONNECTION_THROUGH
+                                                 : IN_CONNECTION_THROUGH_SKIP;
+          case node_type::PLATFORM_NODE: return AT_STATION;
         }
       } else {
-        return state::IN_CONNECTION;
+        return IN_CONNECTION;
       }
       break;
-    case state::WALK:
+    case WALK:
       if (n && get_node(*n)->is_foot_node()) {
         if (get_node(*c)->get_station() == get_node(*n)->get_station()) {
-          return state::WALK_SKIP;
+          return WALK_SKIP;
         } else {
-          return state::BWD_WALK;
+          return BWD_WALK;
         }
       } else if (n && get_node(*n)->is_station_node()) {
-        return state::WALK;
+        return WALK;
       } else {
-        return state::AT_STATION;
+        return AT_STATION;
       }
-    case state::BWD_WALK:
+    case BWD_WALK:
       if (n && get_node(*n)->is_station_node()) {
-        return state::BWD_WALK_SKIP;
+        return BWD_WALK_SKIP;
       } else {
-        return state::AT_STATION;
+        return AT_STATION;
       }
-    case state::BWD_WALK_SKIP:
+    case BWD_WALK_SKIP:
       if ((n && get_node(*n)->type() == node_type::ROUTE_NODE) ||
           (!n && get_node(*c)->type() == node_type::STATION_NODE)) {
-        return state::AT_STATION;
+        return AT_STATION;
       }
-    case state::WALK_SKIP:
+    case WALK_SKIP:
       if (n && get_node(*c)->type() == node_type::STATION_NODE &&
           get_node(*n)->type() == node_type::FOOT_NODE &&
           get_node(*c)->get_station() != get_node(*n)->get_station()) {
-        return state::BWD_WALK;
+        return BWD_WALK;
       } else {
-        return state::WALK;
+        return WALK;
       }
-    case state::ONTRIP_TRAIN_START: return state::IN_CONNECTION;
+    case ONTRIP_TRAIN_START: return IN_CONNECTION;
   }
   return static_cast<state>(s);
 };
 
 template <typename LabelIt>
-state initial_state(LabelIt& it) {
+int initial_state(LabelIt& it) {
   if (get_node(*it)->is_route_node()) {
     if (get_node(*std::next(it))->is_station_node() ||
         get_node(*std::next(it))->is_platform_node()) {
       ++it;
-      return state::AT_STATION;
+      return AT_STATION;
     } else if (get_node(*std::next(it))->is_foot_node()) {
       ++it;
-      return state::WALK;
+      return WALK;
     } else {
-      return state::ONTRIP_TRAIN_START;
+      return ONTRIP_TRAIN_START;
     }
   } else if (get_node(*std::next(it))->is_station_node()) {
-    return state::WALK;
+    return WALK;
   } else if (get_node(*std::next(it))->is_foot_node()) {
     if (get_node(*it)->get_station() ==
         get_node(*std::next(it))->get_station()) {
       ++it;
     }
-    return state::WALK;
+    return WALK;
   } else {
-    return state::AT_STATION;
+    return AT_STATION;
   }
 }
 
@@ -190,13 +175,13 @@ parse_label_chain(schedule const& sched, Label* terminal_label,
   auto stop_index = -1;
 
   auto it = begin(labels);
-  auto current_state = initial_state(it);
+  int current_state = initial_state(it);
   while (it != end(labels)) {
     auto& current = *it;
 
     switch (current_state) {
-      case state::ONTRIP_TRAIN_START:
-      case state::AT_STATION: {
+      case ONTRIP_TRAIN_START:
+      case AT_STATION: {
         if (current.edge_->type() == edge::HOTEL_EDGE &&
             get_node(*std::next(it))->is_foot_node()) {
           break;
@@ -223,12 +208,12 @@ parse_label_chain(schedule const& sched, Label* terminal_label,
 
         walk_arrival = INVALID_TIME;
 
-        auto inc = current_state == state::AT_STATION ? 1 : 0;
+        auto inc = current_state == AT_STATION ? 1 : 0;
         auto s1 = std::next(it, 0 + inc);
         if (s1 != end(labels)) {
           auto s2 = std::next(it, 1 + inc);
 
-          if (current_state == state::ONTRIP_TRAIN_START && s2 != end(labels) &&
+          if (current_state == ONTRIP_TRAIN_START && s2 != end(labels) &&
               s2->edge_->type() == edge::THROUGH_EDGE) {
             s1 = std::next(it, 1 + inc);
             s2 = std::next(it, 2 + inc);
@@ -259,8 +244,8 @@ parse_label_chain(schedule const& sched, Label* terminal_label,
         break;
       }
 
-      case state::BWD_WALK:
-      case state::WALK: {
+      case BWD_WALK:
+      case WALK: {
         utl::verify(std::next(it) != end(labels),
                     "label chain parser in state walk at last label");
 
@@ -320,7 +305,7 @@ parse_label_chain(schedule const& sched, Label* terminal_label,
         break;
       }
 
-      case state::IN_CONNECTION: {
+      case IN_CONNECTION: {
         if (current.connection_) {
           transports.emplace_back(static_cast<unsigned int>(stop_index),
                                   static_cast<unsigned int>(stop_index) + 1,
@@ -368,8 +353,6 @@ parse_label_chain(schedule const& sched, Label* terminal_label,
         last_con = current.connection_;
         break;
       }
-
-      default:;
     }
 
     ++it;

@@ -14,16 +14,15 @@
 
 namespace motis::test {
 
-template <typename Base>
-struct generic_motis_instance_test : public Base {
-  explicit generic_motis_instance_test(
+struct motis_instance_test : public ::testing::Test {
+  explicit motis_instance_test(
       loader::loader_options const&,
       std::vector<std::string> const& modules = {},
       std::vector<std::string> const& modules_cmdline_opt = {});
 
   template <typename F>
   void subscribe(std::string const& topic, F&& func) {
-    instance_->subscribe(topic, std::forward<F>(func), {});
+    instance_->subscribe(topic, std::forward<F>(func));
   }
 
   template <typename Fn>
@@ -57,7 +56,5 @@ struct generic_motis_instance_test : public Base {
 
   std::unique_ptr<bootstrap::motis_instance> instance_;
 };
-
-using motis_instance_test = generic_motis_instance_test<::testing::Test>;
 
 }  // namespace motis::test

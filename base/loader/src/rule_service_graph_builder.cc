@@ -619,20 +619,20 @@ struct rule_service_route_builder {
     push_mem(gb_.sched_.trip_edges_, route_edges);
     auto const edges_ptr = gb_.sched_.trip_edges_.back().get();
 
-    auto route_trips = gb_.sched_.expanded_trips_.emplace_back();
+    auto trips_added = false;
     for (auto lcon_idx = 0U; lcon_idx < lc_count; ++lcon_idx) {
       full_trip_id ftid;
-      push_mem(gb_.sched_.trip_mem_, ftid, "", edges_ptr, lcon_idx,
+      push_mem(gb_.sched_.trip_mem_, ftid, edges_ptr, lcon_idx,
                static_cast<trip_idx_t>(gb_.sched_.trip_mem_.size()),
                trip_debug{}, mcd::vector<uint32_t>{});
       auto const trip_ptr = gb_.sched_.trip_mem_.back().get();
       if (gb_.check_trip(trip_ptr)) {
-        route_trips.push_back(trip_ptr);
+        gb_.sched_.expanded_trips_.push_back(trip_ptr);
+        trips_added = true;
       }
     }
-    if (!route_trips.empty()) {
-      gb_.sched_.route_to_expanded_routes_[route_id_].emplace_back(
-          route_trips.index());
+    if (trips_added) {
+      gb_.sched_.expanded_trips_.finish_key();
     }
   }
 
@@ -668,7 +668,9 @@ void rule_service_graph_builder::add_rule_services(
     route_builder.build_routes();
     route_builder.connect_through_services(rule_service);
 
-    route_builder.expand_trips();
+    if (gb_.expand_trips_) {
+      route_builder.expand_trips();
+    }
   }
 }
 

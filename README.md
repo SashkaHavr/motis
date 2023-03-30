@@ -1,6 +1,6 @@
 <p align="center"><img src="logo.svg" width="196" height="196"></p>
 
-[![Linux+MacOS Build](https://github.com/motis-project/motis/actions/workflows/unix.yml/badge.svg)](https://github.com/motis-project/motis/actions/workflows/unix.yml)
+![Linux Build](https://github.com/motis-project/motis/workflows/Linux%20Build/badge.svg)
 ![Windows Build](https://github.com/motis-project/motis/workflows/Windows%20Build/badge.svg)
 
 MOTIS stands for **M**ulti **O**bjective **T**ravel **I**nformation **S**ystem.

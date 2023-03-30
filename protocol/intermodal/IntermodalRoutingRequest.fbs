@@ -74,7 +74,7 @@ table CarParking {
 table GBFS {
   provider: string;
   max_walk_duration: int;
-  max_vehicle_duration: int;
+  max_ride_duration: int;
 }
 
 union Mode {
@@ -117,8 +117,7 @@ table ModeWrapper {
 //       "mode_type": "Foot",
 //       "mode": { "max_duration": 900 }
 //     }],
-//     "search_type": "SingleCriterion",
-//     "router": "/routing"
+//     "search_type": "SingleCriterion"
 //   }
 // }
 table IntermodalRoutingRequest {
@@ -128,5 +127,4 @@ table IntermodalRoutingRequest {
   destination_modes: [ModeWrapper];
   search_type: routing.SearchType;
   search_dir: motis.SearchDir;
-  router: string;
 }

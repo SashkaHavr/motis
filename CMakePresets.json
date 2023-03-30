@@ -58,7 +58,6 @@
         "CMAKE_EXE_LINKER_FLAGS": "-B/opt/mold",
         "CMAKE_BUILD_TYPE": "Release",
         "MOTIS_MIMALLOC": "ON",
-        "CISTA_USE_MIMALLOC": "ON",
         "MOTIS_WITH_WEBUI": "ON"
       },
       "environment": {
@@ -149,8 +148,8 @@
       },
       "environment": {
         "PATH": "/opt:/opt/cmake-3.23.0-rc3-linux-x86_64/bin:/opt/buildcache/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "CXX": "/usr/bin/g++-11",
-        "CC": "/usr/bin/gcc-11"
+        "CXX": "/usr/bin/g++-10",
+        "CC": "/usr/bin/gcc-10"
       }
     },
     {
@@ -165,8 +164,8 @@
       },
       "environment": {
         "PATH": "/opt:/opt/cmake-3.23.0-rc3-linux-x86_64/bin:/opt/buildcache/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "CXX": "/usr/bin/g++-11",
-        "CC": "/usr/bin/gcc-11"
+        "CXX": "/usr/bin/g++-10",
+        "CC": "/usr/bin/gcc-10"
       }
     },
     {
@@ -180,8 +179,8 @@
       },
       "environment": {
         "PATH": "/opt:/opt/cmake-3.23.0-rc3-linux-x86_64/bin:/opt/buildcache/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "CXX": "/usr/bin/g++-11",
-        "CC": "/usr/bin/gcc-11"
+        "CXX": "/usr/bin/g++-10",
+        "CC": "/usr/bin/gcc-10"
       }
     },
     {

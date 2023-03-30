@@ -1,8 +1,13 @@
 #pragma once
 
+#include <charconv>
 #include <chrono>
+#include <ctime>
+#include <algorithm>
 #include <limits>
 #include <sstream>
+#include <string>
+#include <string_view>
 
 #include "flatbuffers/flatbuffers.h"
 
@@ -13,14 +18,24 @@
 #include "utl/verify.h"
 
 #include "motis/core/common/unixtime.h"
+#include "motis/hash_map.h"
+#include "motis/protocol/RISMessage_generated.h"
 
 namespace motis::ris::ribasis {
 
-struct ris_msg_context {
-  unixtime timestamp_{};
-  unixtime earliest_{std::numeric_limits<unixtime>::max()};
-  unixtime latest_{std::numeric_limits<unixtime>::min()};
+struct context {
+  explicit context(unixtime timestamp)
+      : timestamp_{timestamp},
+        earliest_{std::numeric_limits<unixtime>::max()},
+        latest_{std::numeric_limits<unixtime>::min()} {}
+
   flatbuffers::FlatBufferBuilder b_{};
+  unixtime timestamp_, earliest_, latest_;
+
+  mcd::hash_map<std::string, flatbuffers::Offset<StationInfo>> stations_;
+  mcd::hash_map<std::string, flatbuffers::Offset<CategoryInfo>> categories_;
+  mcd::hash_map<std::string, flatbuffers::Offset<flatbuffers::String>> lines_;
+  mcd::hash_map<std::string, flatbuffers::Offset<ProviderInfo>> providers_;
 };
 
 inline unixtime get_timestamp(rapidjson::Value const& obj, char const* key,
@@ -36,7 +51,7 @@ inline unixtime get_timestamp(rapidjson::Value const& obj, char const* key,
       .count();
 }
 
-inline unixtime get_schedule_timestamp(ris_msg_context& ctx,
+inline unixtime get_schedule_timestamp(context& ctx,
                                        rapidjson::Value const& obj,
                                        char const* key) {
   auto const ts = get_timestamp(obj, key);

@@ -48,11 +48,10 @@ void routing::reg_subc(motis::module::subc_reg& r) {
 
 void routing::init(motis::module::registry& reg) {
   reg.register_op("/routing", [this](msg_ptr const& msg) { return route(msg); },
-                  {kScheduleReadAccess});
-  reg.register_op(
-      "/trip_to_connection",
-      [this](msg_ptr const& msg) { return trip_to_connection(msg); },
-      {kScheduleReadAccess});
+                  {});
+  reg.register_op("/trip_to_connection", [this](msg_ptr const& msg) {
+    return trip_to_connection(msg);
+  });
 }
 
 msg_ptr routing::route(msg_ptr const& msg) {

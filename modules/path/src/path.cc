@@ -30,7 +30,6 @@ using namespace flatbuffers;
 using namespace motis::module;
 using namespace motis::access;
 using namespace motis::logging;
-namespace fs = std::filesystem;
 
 namespace motis::path {
 
@@ -63,7 +62,7 @@ void path::import(import_dispatcher& reg) {
         auto const osrm = motis_content(OSRMEvent, dependencies.at("OSRM"));
 
         auto const dir = get_data_directory() / "path";
-        fs::create_directories(dir);
+        boost::filesystem::create_directories(dir);
 
         auto const state =
             import_state{data_path(osm->path()->str()), osm->hash(),
@@ -132,35 +131,27 @@ void path::init(registry& r) {
   }
 
   // used by: railviz
-  r.register_op("/path/boxes", [this](msg_ptr const&) { return boxes(); },
-                {{to_res_id(global_res_id::PATH_DATA), ctx::access_t::READ}});
+  r.register_op("/path/boxes", [this](msg_ptr const&) { return boxes(); });
 
   // used by: railviz, sim, legacydebugger
   r.register_op("/path/by_trip_id",
-                [this](msg_ptr const& m) { return by_trip_id(m); },
-                {{to_res_id(global_res_id::PATH_DATA), ctx::access_t::READ},
-                 kScheduleReadAccess});
+                [this](msg_ptr const& m) { return by_trip_id(m); });
 
   // used by: sim, legacydebugger
   r.register_op("/path/by_station_seq",
-                [this](msg_ptr const& m) { return by_station_seq(m); },
-                {{to_res_id(global_res_id::PATH_DATA), ctx::access_t::READ}});
+                [this](msg_ptr const& m) { return by_station_seq(m); });
 
   // used by: railviz
   r.register_op("/path/by_trip_id_batch",
-                [this](msg_ptr const& m) { return by_trip_id_batch(m); },
-                {{to_res_id(global_res_id::PATH_DATA), ctx::access_t::READ},
-                 kScheduleReadAccess});
+                [this](msg_ptr const& m) { return by_trip_id_batch(m); });
 
   // used by: debugger
   r.register_op("/path/by_tile_feature",
-                [this](msg_ptr const& m) { return by_tile_feature(m); },
-                {{to_res_id(global_res_id::PATH_DATA), ctx::access_t::READ}});
+                [this](msg_ptr const& m) { return by_tile_feature(m); });
 
   // used by: debugger
   r.register_op("/path/tiles",
-                [this](msg_ptr const& m) { return path_tiles(m); },
-                {{to_res_id(global_res_id::PATH_DATA), ctx::access_t::READ}});
+                [this](msg_ptr const& m) { return path_tiles(m); });
 }
 
 msg_ptr path::boxes() const {

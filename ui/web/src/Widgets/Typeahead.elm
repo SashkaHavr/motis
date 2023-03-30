@@ -122,16 +122,12 @@ type Msg
     | Deb (Debounce.Msg Msg)
     | RequestSuggestions
     | ItemSelected
-    | Empty
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         NoOp ->
-            model ! []
-
-        Empty ->
             model ! []
 
         StationSuggestionsResponse suggestions ->
@@ -204,13 +200,7 @@ update msg model =
             { model | hoverIndex = index } ! []
 
         Hide ->
-            { model | visible = False, hoverIndex = 0 }
-                ! [ if String.isEmpty model.input then
-                        Task.perform identity (Task.succeed Empty)
-
-                    else
-                        Cmd.none
-                  ]
+            { model | visible = False, hoverIndex = 0 } ! []
 
         InputUpdate msg_ ->
             let
@@ -225,13 +215,7 @@ update msg model =
                         Input.Blur ->
                             { model | visible = False, hoverIndex = 0 }
             in
-            { updated | inputWidget = Input.update msg_ model.inputWidget }
-                ! [ if not updated.visible && String.isEmpty updated.input then
-                        Task.perform identity (Task.succeed Empty)
-
-                    else
-                        Cmd.none
-                  ]
+            { updated | inputWidget = Input.update msg_ model.inputWidget } ! []
 
         Deb a ->
             Debounce.update debounceCfg a model

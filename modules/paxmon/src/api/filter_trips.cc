@@ -37,8 +37,6 @@ struct trip_info {
 
   std::uint16_t max_expected_pax_{};
   std::uint16_t max_pax_range_{};
-  std::uint16_t max_pax_{};
-  std::uint16_t max_capacity_{};
 
   std::vector<edge_load_info> edge_load_infos_{};
 };
@@ -49,7 +47,7 @@ msg_ptr filter_trips(paxmon_data& data, msg_ptr const& msg) {
   auto const req = motis_content(PaxMonFilterTripsRequest, msg);
   auto const uv_access = get_universe_and_schedule(data, req->universe());
   auto const& sched = uv_access.sched_;
-  auto const& uv = uv_access.uv_;
+  auto& uv = uv_access.uv_;
   auto const current_time =
       unix_to_motistime(sched.schedule_begin_, sched.system_time_);
 
@@ -101,19 +99,15 @@ msg_ptr filter_trips(paxmon_data& data, msg_ptr const& msg) {
       }
 
       auto const dep = trp->id_.primary_.get_time();
-      auto const arr = trp->id_.secondary_.target_time_;
       if (filter_by_time == PaxMonFilterTripsTimeFilter_DepartureTime) {
         if (dep < filter_interval_begin || dep >= filter_interval_end) {
           continue;
         }
       } else if (filter_by_time ==
                  PaxMonFilterTripsTimeFilter_DepartureOrArrivalTime) {
+        auto const arr = trp->id_.secondary_.target_time_;
         if ((dep < filter_interval_begin || dep >= filter_interval_end) &&
             (arr < filter_interval_begin || arr >= filter_interval_end)) {
-          continue;
-        }
-      } else if (filter_by_time == PaxMonFilterTripsTimeFilter_ActiveTime) {
-        if (dep > filter_interval_end || arr < filter_interval_begin) {
           continue;
         }
       }
@@ -141,18 +135,15 @@ msg_ptr filter_trips(paxmon_data& data, msg_ptr const& msg) {
       if (!include_edges && ignore_section) {
         continue;
       }
-      auto const group_routes = uv.pax_connection_info_.group_routes(e->pci_);
-      auto const pdf = get_load_pdf(uv.passenger_groups_, group_routes);
+      auto const groups = uv.pax_connection_info_.groups_[e->pci_];
+      auto const pdf = get_load_pdf(uv.passenger_groups_, groups);
       auto const cdf = get_cdf(pdf);
       auto const capacity = e->capacity();
-      auto const pax_limits =
-          get_pax_limits(uv.passenger_groups_, group_routes);
+      auto const pax_limits = get_pax_limits(uv.passenger_groups_, groups);
       auto const expected_pax = get_expected_load(uv, e->pci_);
       ti.max_pax_range_ = std::max(
           ti.max_pax_range_,
           static_cast<std::uint16_t>(pax_limits.max_ - pax_limits.min_));
-      ti.max_pax_ = std::max(ti.max_pax_, pax_limits.max_);
-      ti.max_capacity_ = std::max(ti.max_capacity_, capacity);
       if (include_edges) {
         ti.edge_load_infos_.emplace_back(
             make_edge_load_info(uv, e, pdf, cdf, false));
@@ -162,9 +153,6 @@ msg_ptr filter_trips(paxmon_data& data, msg_ptr const& msg) {
       }
       ++ti.section_count_;
       ti.max_expected_pax_ = std::max(ti.max_expected_pax_, expected_pax);
-      if (!include && include_load_threshold == 0.0F) {
-        include = true;
-      }
       if (!e->has_capacity()) {
         continue;
       }
@@ -262,20 +250,6 @@ msg_ptr filter_trips(paxmon_data& data, msg_ptr const& msg) {
                                          lhs.max_excess_pax_) >
                                 std::tie(rhs.max_pax_range_, rhs.max_load_,
                                          rhs.max_excess_pax_);
-                       });
-      break;
-    case PaxMonFilterTripsSortOrder_MaxPax:
-      std::stable_sort(begin(selected_trips), end(selected_trips),
-                       [](trip_info const& lhs, trip_info const& rhs) {
-                         return std::tie(lhs.max_pax_, lhs.max_load_) >
-                                std::tie(rhs.max_pax_, rhs.max_load_);
-                       });
-      break;
-    case PaxMonFilterTripsSortOrder_MaxCapacity:
-      std::stable_sort(begin(selected_trips), end(selected_trips),
-                       [](trip_info const& lhs, trip_info const& rhs) {
-                         return std::tie(lhs.max_capacity_, lhs.max_load_) >
-                                std::tie(rhs.max_capacity_, rhs.max_load_);
                        });
       break;
     default: break;

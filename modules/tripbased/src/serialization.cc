@@ -138,7 +138,6 @@ void write_data(tb_data const& data, std::string const& filename,
 
   h.schedule_begin_ = static_cast<int64_t>(sched.schedule_begin_);
   h.schedule_end_ = static_cast<int64_t>(sched.schedule_end_);
-  h.trip_idx_end_ = data.trip_idx_end_;
   h.trip_count_ = data.trip_count_;
   h.line_count_ = data.line_count_;
 
@@ -241,10 +240,10 @@ bool data_okay_for_schedule(header const& h, schedule const& sched) {
     return false;
   }
 
-  if (sched.expanded_trips_.element_count() != h.trip_count_) {
+  if (sched.expanded_trips_.data_size() != h.trip_count_) {
     LOG(info)
         << "trip-based data file contains different number of trips: schedule="
-        << sched.expanded_trips_.element_count()
+        << sched.expanded_trips_.data_size()
         << ", serialized=" << h.trip_count_;
     return false;
   }
@@ -282,7 +281,6 @@ std::unique_ptr<tb_data> read_data(std::string const& filename,
 
   auto data = std::make_unique<tb_data>();
 
-  data->trip_idx_end_ = h.trip_idx_end_;
   data->trip_count_ = h.trip_count_;
   data->line_count_ = h.line_count_;
 

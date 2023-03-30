@@ -38,7 +38,6 @@ std::vector<alternative> find_alternatives(
     unsigned const destination_station_id,
     motis::paxmon::passenger_localization const& localization,
     motis::paxmon::compact_journey const* remaining_journey, bool use_cache,
-    duration pretrip_interval_length, bool allow_start_metas,
-    bool allow_dest_metas);
+    duration pretrip_interval_length);
 
 }  // namespace motis::paxforecast

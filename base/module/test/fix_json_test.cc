@@ -31,8 +31,7 @@ auto const req = std::string{R"({
       }
     ],
     "search_dir": "Forward",
-    "destination_type": "InputPosition",
-    "router": ""
+    "destination_type": "InputPosition"
   },
   "content_type": "IntermodalRoutingRequest"
 })"};

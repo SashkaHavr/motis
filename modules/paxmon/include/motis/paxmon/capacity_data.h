@@ -7,8 +7,6 @@ namespace motis::paxmon {
 
 enum class capacity_source : std::uint16_t {
   TRIP_EXACT,
-  TRIP_PRIMARY,
-  TRAIN_NR_AND_STATIONS,
   TRAIN_NR,
   CATEGORY,
   CLASZ,

@@ -1,6 +1,5 @@
 #include "motis/launcher/web_server.h"
 
-#include <fstream>
 #include <functional>
 #include <iostream>
 

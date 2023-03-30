@@ -1,10 +1,10 @@
 include "base/TripServiceInfo.fbs";
 include "base/Station.fbs";
 include "paxmon/PaxMonDistribution.fbs";
-include "paxmon/PaxMonCapacitySource.fbs";
-include "paxmon/PaxMonCapacityType.fbs";
 
 namespace motis.paxmon;
+
+enum PaxMonCapacityType : byte { Known, Unknown, Unlimited }
 
 table PaxMonEdgeLoadInfo {
   from: motis.Station;
@@ -15,7 +15,6 @@ table PaxMonEdgeLoadInfo {
   arrival_current_time: ulong;
   capacity_type: PaxMonCapacityType;
   capacity: uint;
-  capacity_source: PaxMonCapacitySource;
   dist: PaxMonDistribution;
   updated: bool;
   possibly_over_capacity: bool;

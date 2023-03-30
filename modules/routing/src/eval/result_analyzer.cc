@@ -16,6 +16,7 @@
 
 #include "motis/module/message.h"
 #include "motis/protocol/RoutingResponse_generated.h"
+#include "motis/routing/allocator.h"
 
 using namespace motis;
 using namespace motis::module;

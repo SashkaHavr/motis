@@ -1,3 +1,0 @@
-namespace motis.paxmon;
-
-enum PaxMonCapacityType : byte { Known, Unknown, Unlimited }

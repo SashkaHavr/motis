@@ -14,15 +14,14 @@
 namespace motis::loader::gtfs {
 
 struct stop {
-  void compute_close_stations(geo::point_rtree const& stop_rtree);
-  std::set<stop*> get_metas(std::vector<stop*> const& stops);
+  std::set<stop*> get_metas(std::vector<stop*> const&,
+                            geo::point_rtree const& stop_rtree);
 
   std::string id_;
   std::string name_;
   geo::latlng coord_;
   std::string timezone_;
   std::set<stop*> same_name_, parents_, children_;
-  std::vector<unsigned> close_;
 };
 
 using stop_map = std::map<std::string, std::unique_ptr<stop>>;

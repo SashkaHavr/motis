@@ -1,26 +1,17 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include <iterator>
 #include <type_traits>
 #include <vector>
 
 #include "utl/erase.h"
-#include "utl/verify.h"
 
 #include "motis/hash_map.h"
 #include "motis/vector.h"
 
-#include "motis/core/common/dynamic_fws_multimap.h"
-
 #include "motis/paxmon/allocator.h"
-#include "motis/paxmon/compact_journey.h"
-#include "motis/paxmon/graph_index.h"
-#include "motis/paxmon/group_route.h"
-#include "motis/paxmon/index_types.h"
 #include "motis/paxmon/passenger_group.h"
-#include "motis/paxmon/reroute_log_entry.h"
 
 namespace motis::paxmon {
 
@@ -150,41 +141,21 @@ struct passenger_group_container {
 
   inline passenger_group* add(passenger_group&& pg) {
     auto const id = static_cast<passenger_group_index>(groups_.size());
-    auto [g_ptr, m_ptr] = allocator_.create(pg);
+    auto [g_ptr, m_ptr] = allocator_.create(std::move(pg));
     groups_.emplace_back(g_ptr);
     m_ptr->id_ = id;
     groups_by_source_[m_ptr->source_].emplace_back(id);
-
-    auto const routes = group_routes_.emplace_back();
-    utl::verify(routes.index() == id,
-                "passenger_group_container: group_routes out of sync");
-    auto const reroute_log_entries = reroute_log_entries_.emplace_back();
-    utl::verify(reroute_log_entries.index() == id,
-                "passenger_group_container: reroute_log_entries out of sync");
-
     ++active_groups_;
     return m_ptr;
   }
 
-  inline void release(passenger_group_index const pgi) {
-    auto const ptr = groups_.at(pgi);
+  inline void release(passenger_group_index const id) {
+    auto const ptr = groups_.at(id);
     if (ptr) {
       auto const* m_ptr = allocator_.get(ptr);
-      utl::erase(groups_by_source_[m_ptr->source_], pgi);
-
-      for (auto const& gr : group_routes_.at(pgi)) {
-        route_edges_.at(gr.edges_index_).clear();
-        compact_journey_legs_.at(gr.compact_journey_index_).clear();
-      }
-      group_routes_.at(pgi).clear();
-
-      for (auto const& rle : reroute_log_entries_.at(pgi)) {
-        log_entry_new_routes_.at(rle.index_).clear();
-      }
-      reroute_log_entries_.at(pgi).clear();
-
+      utl::erase(groups_by_source_[m_ptr->source_], id);
       allocator_.release(ptr);
-      groups_[pgi] = {};
+      groups_[id] = {};
       --active_groups_;
     }
   }
@@ -230,69 +201,11 @@ struct passenger_group_container {
 
   void reserve(std::size_t size) { groups_.reserve(size); }
 
-  passenger_group& group(passenger_group_index const index) {
-    return *at(index);
-  }
-
-  passenger_group const& group(passenger_group_index const index) const {
-    return *at(index);
-  }
-
-  fws_compact_journey journey(compact_journey_index const cji) const {
-    return fws_compact_journey{compact_journey_legs_.at(cji), final_footpaths_};
-  }
-
-  auto routes(passenger_group_index const pgi) const {
-    return group_routes_.at(pgi);
-  }
-
-  auto routes(passenger_group_index const pgi) { return group_routes_.at(pgi); }
-
-  auto reroute_log_entries(passenger_group_index const pgi) const {
-    return reroute_log_entries_.at(pgi);
-  }
-
-  auto reroute_log_entries(passenger_group_index const pgi) {
-    return reroute_log_entries_.at(pgi);
-  }
-
-  group_route const& route(passenger_group_with_route const pgwr) const {
-    return routes(pgwr.pg_).at(pgwr.route_);
-  }
-
-  group_route& route(passenger_group_with_route const pgwr) {
-    return routes(pgwr.pg_).at(pgwr.route_);
-  }
-
-  auto route_edges(group_route_edges_index const edges_index) const {
-    return route_edges_.at(edges_index);
-  }
-
-  auto route_edges(group_route_edges_index const edges_index) {
-    return route_edges_.at(edges_index);
-  }
-
-  // TODO(groups): remove custom allocator
   allocator<passenger_group> allocator_;
   std::vector<group_pointer> groups_;
   mcd::hash_map<data_source, mcd::vector<passenger_group_index>>
       groups_by_source_;
   std::size_t active_groups_{};
-
-  // index: passenger_group_index
-  dynamic_fws_multimap<group_route> group_routes_;
-
-  // index: compact_journey_index
-  dynamic_fws_multimap<journey_leg> compact_journey_legs_;
-  mcd::vector<final_footpath> final_footpaths_;
-
-  // index: group_route_edges_index
-  dynamic_fws_multimap<edge_index> route_edges_;
-
-  // index: passenger_group_index
-  dynamic_fws_multimap<reroute_log_entry> reroute_log_entries_;
-  // index: reroute_log_entry_index
-  dynamic_fws_multimap<reroute_log_route_info> log_entry_new_routes_;
 };
 
 }  // namespace motis::paxmon

@@ -38,7 +38,6 @@ void parse_trip_updates(knowledge_context& knowledge,
   switch (descriptor.schedule_relationship()) {
     case TripDescriptor_ScheduleRelationship_SCHEDULED:
     case TripDescriptor_ScheduleRelationship_ADDED:
-    case TripDescriptor_ScheduleRelationship_UNSCHEDULED:
     case TripDescriptor_ScheduleRelationship_CANCELED: {
       trip_update_context update_ctx{knowledge.sched_, trip_update,
                                      is_additional_skip_allowed};
@@ -52,10 +51,8 @@ void parse_trip_updates(knowledge_context& knowledge,
     }
 
     case TripDescriptor_ScheduleRelationship_DUPLICATED:
-    default:
-      throw utl::fail("unhandled schedule relationship {}",
-                      TripDescriptor_ScheduleRelationship_Name(
-                          descriptor.schedule_relationship()));
+    case TripDescriptor_ScheduleRelationship_UNSCHEDULED:
+    default: throw utl::fail("unhandled schedule relationship");
   }
 }
 
@@ -80,10 +77,7 @@ void to_ris_message(knowledge_context& knowledge,
       reinterpret_cast<void const*>(s.data()), s.size());
 
   if (!success) {
-    LOG(logging::error) << "GTFS-RT unable to parse protobuf message " << tag
-                        << ": \""
-                        << s.substr(0, std::min(s.size(), size_t{1000U}))
-                        << (s.size() > 1000U ? "..." : "") << "\"";
+    LOG(logging::error) << "GTFS-RT unable to parse protobuf message " << tag;
     return;
   }
 
@@ -92,27 +86,21 @@ void to_ris_message(knowledge_context& knowledge,
     return;
   }
 
-  auto successful = 0U;
+  LOG(info) << (tag.empty() ? "" : tag + ": ") << "parsing "
+            << feed_message.entity().size() << " GTFS-RT updates";
+
   auto const message_time =
       static_cast<unixtime>(feed_message.header().timestamp());
   for (auto const& entity : feed_message.entity()) {
     try {
       parse_entity(knowledge, is_additional_skip_allowed, entity, message_time,
                    cb, tag);
-      ++successful;
     } catch (const std::exception& e) {
       LOG(logging::error) << "Exception on entity " << entity.id()
                           << " for message with timestamp " << message_time
-                          << ": " << e.what()
-                          << ", message=" << entity.DebugString();
+                          << ": " << e.what();
     }
   }
-  LOG(info) << (tag.empty() ? "" : tag.substr(0, tag.size() - 1) + ": ")
-            << "parsed " << feed_message.entity().size()
-            << " GTFS-RT updates: " << successful << "/"
-            << feed_message.entity().size() << " ("
-            << (100.0 * successful / feed_message.entity().size()) << "%)"
-            << " successful";
   knowledge.sort_known_lists();
 }
 

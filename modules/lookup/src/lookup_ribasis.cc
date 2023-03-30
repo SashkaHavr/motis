@@ -27,7 +27,6 @@
 #include "motis/core/access/time_access.h"
 #include "motis/core/access/trip_access.h"
 #include "motis/core/access/trip_iterator.h"
-#include "motis/core/access/uuids.h"
 #include "motis/core/conv/trip_conv.h"
 
 using namespace flatbuffers;
@@ -37,16 +36,8 @@ namespace uu = boost::uuids;
 namespace motis::lookup {
 
 /* Current limitations:
- * - Most UUIDs are randomly generated for every request and can
+ * - All UUIDs are randomly generated for every request and can
  *   only be used to parse the message (i.e. they are not stable and not stored)
- *   Random UUIDs:
- *   - stations
- *   - providers
- *   - categories
- *   - lines
- *   - tracks
- *   - trips (unless a RI Basis message for the trip has been received)
- *   - events (unless a RI Basis message for the trip has been received)
  * - All lines with the same name have the same UUID
  * - All tracks with the same name (even at different stations) have the same
  *   UUID
@@ -143,28 +134,16 @@ struct rib_ctx {
   }
 
   Offset<String> trip_id(trip const* trp) {
-    return utl::get_or_create(trip_ids_, trp, [&]() {
-      return trp->uuid_.is_nil() ? rand_uuid() : uuid_to_string(trp->uuid_);
-    });
+    return utl::get_or_create(trip_ids_, trp, [&]() { return rand_uuid(); });
   }
 
   Offset<String> event_key(trip const* trp, ev_key const ev) {
-    return utl::get_or_create(event_keys_, mcd::pair{trp, ev}, [&]() {
-      if (auto const uuid = access::get_event_uuid(sched_, trp, ev);
-          uuid.has_value()) {
-        return uuid_to_string(uuid.value());
-      } else {
-        return rand_uuid();
-      }
-    });
+    return utl::get_or_create(event_keys_, mcd::pair{trp, ev},
+                              [&]() { return rand_uuid(); });
   }
 
   Offset<String> rand_uuid() {
     return fbb_.CreateString(uu::to_string(uuid_gen_()));
-  }
-
-  Offset<String> uuid_to_string(uu::uuid const& u) {
-    return fbb_.CreateString(uu::to_string(u));
   }
 
   FlatBufferBuilder& fbb_;
@@ -360,7 +339,6 @@ Offset<RiBasisTrip> rib_trip(rib_ctx& rc, trip const* trp,
     }
   }
 
-  auto const sections = trip_sections(rc, trp);
   return CreateRiBasisTrip(
       rc.fbb_, to_fbs(rc.sched_, rc.fbb_, trp),
       CreateRiBasisFahrt(
@@ -390,7 +368,7 @@ Offset<RiBasisTrip> rib_trip(rib_ctx& rc, trip const* trp,
               rc.fbb_.CreateVector(rc.providers_),  // allVerwaltung
               rc.fbb_.CreateVector(rc.categories_),  // allGattung
               rc.fbb_.CreateVector(rc.lines_),  // allLinie
-              sections,  // allFahrtabschnitt
+              trip_sections(rc, trp),  // allFahrtabschnitt
               rc.fbb_.CreateVector(through_in),  // allZubringerfahrtzuordnung
               rc.fbb_.CreateVector(  // allAbbringerfahrtzuordnung
                   through_out))));
@@ -429,7 +407,9 @@ Offset<LookupRiBasisResponse> lookup_ribasis(FlatBufferBuilder& fbb,
                                              schedule const& sched,
                                              LookupRiBasisRequest const* req) {
   auto const t = req->trip_id();
-  auto requested_trp = from_fbs(sched, t);
+  auto requested_trp = get_trip(sched, t->station_id()->str(), t->train_nr(),
+                                t->time(), t->target_station_id()->str(),
+                                t->target_time(), t->line_id()->str());
 
   auto rc = rib_ctx{fbb, sched};
   auto const trips_and_through_edges =

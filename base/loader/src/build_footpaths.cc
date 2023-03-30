@@ -37,6 +37,7 @@ using component_it = component_vec::iterator;
 using component_range = std::pair<component_it, component_it>;
 
 struct footpath_builder {
+
   footpath_builder(
       schedule& sched, loader_options const& opt,
       mcd::hash_map<Station const*, station_node*> const& station_nodes)
@@ -82,6 +83,7 @@ struct footpath_builder {
         duration = *adjusted_duration;
       }
 
+      from_station->equivalent_.emplace_back(to_station.get());
       add_foot_edge_pair(from_node, to_node, duration);
     }
     LOG(ml::info) << "Skipped " << skipped
@@ -207,11 +209,14 @@ struct footpath_builder {
           process_component(range.first, range.second, fgraph);
         },
         utl::parallel_error_strategy::CONTINUE_EXEC);
-    for (auto const& [idx, ex] : errors) {
-      try {
-        std::rethrow_exception(ex);
-      } catch (std::exception const& e) {
-        LOG(ml::error) << "footpath error: " << idx << " (" << e.what() << ")";
+    if (!errors.empty()) {
+      for (auto const& [idx, ex] : errors) {
+        try {
+          std::rethrow_exception(ex);
+        } catch (std::exception const& e) {
+          LOG(ml::error) << "footpath error: " << idx << " (" << e.what()
+                         << ")";
+        }
       }
     }
   }
@@ -326,11 +331,10 @@ struct footpath_builder {
       }
       return;
     }
-    utl::verify(size > 2, "invalid size {}", size);
+    utl::verify(size > 2, "invalid size");
 
-    constexpr auto const kInvalidTime =
-        std::numeric_limits<std::uint8_t>::max();
-    auto mat = make_std_flat_matrix<std::uint8_t>(size, kInvalidTime);
+    constexpr auto const kInvalidTime = std::numeric_limits<motis::time>::max();
+    auto mat = make_flat_matrix<motis::time>(size, kInvalidTime);
 
     for (auto i = 0; i < size; ++i) {
       auto it = lb;

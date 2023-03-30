@@ -1,9 +1,7 @@
+#include <codecvt>
 #include <ctime>
 #include <algorithm>
 #include <iomanip>
-
-#include "fmt/core.h"
-#include "fmt/ostream.h"
 
 #include "motis/core/common/constants.h"
 #include "motis/core/common/date_time_util.h"
@@ -100,7 +98,6 @@ inline bool is_virtual_station(journey::stop const& stop) {
 
 bool print_journey(journey const& j, std::ostream& out, bool local_time,
                    realtime_format rt_format) {
-  out << std::setfill(' ');
   out << "Journey: duration=" << std::left << std::setw(3) << j.duration_
       << " transfers=" << std::left << std::setw(2) << j.transfers_
       << " accessibility=" << std::left << std::setw(3) << j.accessibility_
@@ -114,6 +111,7 @@ bool print_journey(journey const& j, std::ostream& out, bool local_time,
     out << " (UTC)" << std::endl;
   }
 
+  std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> utf8_conv;
   out << "\nStops:" << std::endl;
   for (auto i = 0UL; i < j.stops_.size(); ++i) {
     auto const& stop = j.stops_[i];
@@ -121,16 +119,24 @@ bool print_journey(journey const& j, std::ostream& out, bool local_time,
                          ? stop.name_ + " (" + std::to_string(stop.lat_) + ";" +
                                std::to_string(stop.lng_) + ")"
                          : stop.name_;
-
-    fmt::print(out, "{:2}: {:7} {:.<48} a: ", i, stop.eva_no_, stop_name);
+    auto const stop_name_len = utf8_conv.from_bytes(stop_name).size();
+    out << std::right << std::setw(2) << i << ": " << std::left << std::setw(7)
+        << stop.eva_no_ << " " << std::left
+        << std::setw(std::max(0, 50 - static_cast<int>(stop_name_len) +
+                                     static_cast<int>(stop_name.size())))
+        << std::setfill('.') << stop_name << std::setfill(' ') << " a: ";
     print_event(out, stop.arrival_, local_time, rt_format);
-    fmt::print(out, "  d: ");
+    out << "  d: ";
     print_event(out, stop.departure_, local_time, rt_format);
-    fmt::print(out, stop.exit_ ? "  exit" : "      ");
-    fmt::print(out, stop.enter_ ? " enter" : "      ");
-    out << " " << stop.arrival_.track_;
-    out << " " << stop.departure_.track_;
-    out << "\n";
+    if (stop.exit_) {
+      out << " exit";
+    } else {
+      out << "     ";
+    }
+    if (stop.enter_) {
+      out << " enter";
+    }
+    out << std::endl;
   }
 
   out << "\nTransports:" << std::endl;
@@ -147,11 +153,8 @@ bool print_journey(journey const& j, std::ostream& out, bool local_time,
           << trans.mumo_accessibility_ << std::endl;
     } else {
       out << std::left << std::setw(10) << trans.name_
-          << "                duration=" << trans.duration_ << ", provider=\""
-          << trans.provider_ << "\", direction=\"" << trans.direction_
-          << "\", line=\"" << trans.line_identifier_
-          << "\", clasz=" << static_cast<int>(trans.clasz_) << ", duration=\""
-          << trans.duration_ << "\"\n";
+          << "                duration=" << std::left << std::setw(3)
+          << trans.duration_ << std::endl;
     }
   }
 

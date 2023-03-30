@@ -5,8 +5,6 @@
 #include <functional>
 #include <numeric>
 
-#include "boost/uuid/nil_generator.hpp"
-
 #include "utl/enumerate.h"
 #include "utl/get_or_create.h"
 #include "utl/progress_tracker.h"
@@ -26,8 +24,6 @@
 #include "motis/core/schedule/validate_graph.h"
 #include "motis/core/access/time_access.h"
 #include "motis/core/access/trip_iterator.h"
-#include "motis/core/debug/route_graph.h"
-#include "motis/core/debug/trip.h"
 
 #include "motis/loader/build_footpaths.h"
 #include "motis/loader/build_graph.h"
@@ -52,8 +48,8 @@ char const* c_str(flatbuffers64::String const* str) {
 graph_builder::graph_builder(schedule& sched, loader_options const& opt)
     : sched_{sched},
       apply_rules_{opt.apply_rules_},
-      no_local_transport_{opt.no_local_transport_},
-      debug_broken_trips_{opt.debug_broken_trips_} {}
+      expand_trips_{opt.expand_trips_},
+      no_local_transport_{opt.no_local_transport_} {}
 
 full_trip_id graph_builder::get_full_trip_id(Service const* s, int day,
                                              int section_idx) {
@@ -106,8 +102,7 @@ trip* graph_builder::register_service(Service const* s, int day_idx) {
   auto const stored =
       sched_.trip_mem_
           .emplace_back(mcd::make_unique<trip>(
-              get_full_trip_id(s, day_idx),
-              s->trip_id() == nullptr ? "" : s->trip_id()->str(), nullptr, 0U,
+              get_full_trip_id(s, day_idx), nullptr, 0U,
               static_cast<trip_idx_t>(sched_.trip_mem_.size()),
               s->debug() == nullptr
                   ? trip_debug{}
@@ -122,9 +117,7 @@ trip* graph_builder::register_service(Service const* s, int day_idx) {
                                    }),
                                s->debug()->line_from(), s->debug()->line_to()},
               s->seq_numbers() == nullptr ? mcd::vector<uint32_t>{}
-                                          : mcd::to_vec(*s->seq_numbers()),
-              boost::uuids::nil_uuid(),
-              s->schedule_relationship() == ScheduleRelationship_UNSCHEDULED))
+                                          : mcd::to_vec(*s->seq_numbers())))
           .get();
   sched_.trips_.emplace_back(stored->id_.primary_, stored);
 
@@ -246,7 +239,9 @@ void graph_builder::add_route_services(
     auto r = create_route(services[0].first->route(), route, route_id);
     index_first_route_node(*r);
     write_trip_info(*r);
-    add_expanded_trips(*r);
+    if (expand_trips_) {
+      add_expanded_trips(*r);
+    }
   }
 }
 
@@ -325,46 +320,30 @@ bool graph_builder::are_duplicates(Service const* service_a,
 
 void graph_builder::add_expanded_trips(route const& r) {
   assert(!r.empty());
+  auto trips_added = false;
   auto const& re = r.front().get_route_edge();
   if (re != nullptr) {
-    auto const route_id = re->from_->route_;
-    auto route_trips = sched_.expanded_trips_.emplace_back();
     for (auto const& lc : re->m_.route_edge_.conns_) {
       auto const& merged_trips = sched_.merged_trips_[lc.trips_];
       assert(merged_trips != nullptr);
       assert(merged_trips->size() == 1);
       auto const trp = merged_trips->front();
       if (check_trip(trp)) {
-        route_trips.push_back(trp);
+        sched_.expanded_trips_.push_back(trp);
+        trips_added = true;
       }
     }
-    if (!route_trips.empty()) {
-      sched_.route_to_expanded_routes_[route_id].emplace_back(
-          route_trips.index());
-    }
+  }
+  if (trips_added) {
+    sched_.expanded_trips_.finish_key();
   }
 }
 
 bool graph_builder::check_trip(trip const* trp) {
-  if (trp->edges_->empty()) {
-    LOG(info) << "broken trip: " << debug::trip{sched_, trp} << ": no edges";
-    return false;
-  }
-  time last_time = 0;
-  for (auto const sec : access::sections{trp}) {
-    auto const& lc = sec.lcon();
-    auto const section_times_ok = lc.d_time_ <= lc.a_time_;
-    auto const stop_times_ok = last_time <= lc.d_time_;
-    if (!section_times_ok || !stop_times_ok) {
-      if (debug_broken_trips_) {
-        LOG(info) << "broken trip: " << debug::trip{sched_, trp}
-                  << ": lc={dep=" << format_time(lc.d_time_)
-                  << ", arr=" << format_time(lc.a_time_)
-                  << "}, last_time=" << format_time(last_time) << ":\n"
-                  << debug::rule_service_trip_with_sections{sched_, trp}
-                  << "\nroute graph:\n\n"
-                  << debug::route_graph{sched_, trp} << "\n";
-      }
+  auto last_time = 0U;
+  for (auto const& section : motis::access::sections(trp)) {
+    auto const& lc = section.lcon();
+    if (lc.d_time_ > lc.a_time_ || last_time > lc.d_time_) {
       ++broken_trips_;
       return false;
     }
@@ -553,18 +532,11 @@ light_connection graph_builder::section_to_connection(
   auto const section_timezone = section->provider() == nullptr
                                     ? nullptr
                                     : section->provider()->timezone_name();
-  std::optional<std::string> error;
-  std::tie(dep_motis_time, arr_motis_time, error) = get_event_times(
+  std::tie(dep_motis_time, arr_motis_time) = get_event_times(
       tz_cache_, sched_.schedule_begin_, day - first_day_, prev_arr, dep_time,
       arr_time, from.timez_, c_str(from_station->timezone_name()),
       c_str(section_timezone), to.timez_, c_str(to_station->timezone_name()),
       c_str(section_timezone), adjusted);
-  if (error.has_value()) {
-    LOG(logging::error) << "invalid times: " << *error
-                        << ", section_idx=" << section_idx << ", trip="
-                        << (ref->trip_id() != nullptr ? ref->trip_id()->str()
-                                                      : "unkown");
-  }
 
   // Count events.
   ++from.dep_class_events_.at(static_cast<service_class_t>(con_.clasz_));
@@ -875,6 +847,10 @@ schedule_ptr build_graph(std::vector<Schedule const*> const& fbs_schedules,
     }
   }
 
+  if (opt.expand_trips_) {
+    sched->expanded_trips_.finish_map();
+  }
+
   progress_tracker->status("Footpaths").out_bounds(85, 90);
   build_footpaths(*sched, opt, builder.stations_, fbs_schedules);
 
@@ -920,9 +896,11 @@ schedule_ptr build_graph(std::vector<Schedule const*> const& fbs_schedules,
   LOG(info) << builder.lcon_count_ << " light connections";
   LOG(info) << builder.next_route_index_ << " routes";
   LOG(info) << sched->trip_mem_.size() << " trips";
-  LOG(info) << sched->expanded_trips_.index_size() << " expanded routes";
-  LOG(info) << sched->expanded_trips_.element_count() << " expanded trips";
-  LOG(info) << builder.broken_trips_ << " broken trips ignored";
+  if (opt.expand_trips_) {
+    LOG(info) << sched->expanded_trips_.index_size() - 1 << " expanded routes";
+    LOG(info) << sched->expanded_trips_.data_size() << " expanded trips";
+    LOG(info) << builder.broken_trips_ << " broken trips ignored";
+  }
 
   validate_graph(*sched);
   utl::verify(

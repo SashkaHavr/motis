@@ -24,9 +24,6 @@ TEST(loader_gtfs_route, read_stop_times_example_data) {
   auto stops = read_stops(loaded_file{SCHEDULES / "example" / STOPS_FILE});
   read_stop_times(loaded_file{SCHEDULES / "example" / STOP_TIMES_FILE}, trips,
                   stops);
-  for (auto& [_, trip] : trips) {
-    trip->interpolate();
-  }
 
   auto awe1_it = trips.find("AWE1");
   ASSERT_NE(end(trips), awe1_it);
@@ -41,8 +38,8 @@ TEST(loader_gtfs_route, read_stop_times_example_data) {
 
   stop = awe1_stops[2];
   EXPECT_EQ("S2", stop.stop_->id_);
-  EXPECT_EQ(6, stop.arr_.time_);
-  EXPECT_EQ(6, stop.dep_.time_);
+  EXPECT_EQ(-1, stop.arr_.time_);
+  EXPECT_EQ(-1, stop.dep_.time_);
   EXPECT_FALSE(stop.arr_.in_out_allowed_);
   EXPECT_TRUE(stop.dep_.in_out_allowed_);
 
@@ -55,8 +52,8 @@ TEST(loader_gtfs_route, read_stop_times_example_data) {
 
   stop = awe1_stops[4];
   EXPECT_EQ("S5", stop.stop_->id_);
-  EXPECT_EQ(6, stop.arr_.time_);
-  EXPECT_EQ(6, stop.dep_.time_);
+  EXPECT_EQ(-1, stop.arr_.time_);
+  EXPECT_EQ(-1, stop.dep_.time_);
   EXPECT_TRUE(stop.arr_.in_out_allowed_);
   EXPECT_TRUE(stop.dep_.in_out_allowed_);
 
@@ -66,19 +63,6 @@ TEST(loader_gtfs_route, read_stop_times_example_data) {
   EXPECT_EQ(6, stop.dep_.time_);
   EXPECT_TRUE(stop.arr_.in_out_allowed_);
   EXPECT_TRUE(stop.dep_.in_out_allowed_);
-
-  EXPECT_THROW(awe1_it->second->expand_frequencies(
-                   [](trip const&, ScheduleRelationship) {}),
-               std::runtime_error);
-
-  read_frequencies(loaded_file{SCHEDULES / "example" / FREQUENCIES_FILE},
-                   trips);
-  auto i = 0U;
-  awe1_it->second->expand_frequencies([&](trip const&, ScheduleRelationship s) {
-    EXPECT_EQ(ScheduleRelationship_UNSCHEDULED, s);
-    ++i;
-  });
-  EXPECT_EQ(357U, i);
 }
 
 }  // namespace motis::loader::gtfs
